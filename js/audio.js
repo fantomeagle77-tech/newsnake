@@ -14,8 +14,8 @@
     ctx = new AC();
 
     master = ctx.createGain(); master.gain.value = 0.9;
-    sfx = ctx.createGain();    sfx.gain.value = 0.9;
-    music = ctx.createGain();  music.gain.value = 0.25;
+    sfx = ctx.createGain();    sfx.gain.value = 0.7;
+    music = ctx.createGain();  music.gain.value = 0.45;
 
     sfx.connect(master);
     music.connect(master);
