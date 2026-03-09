@@ -90,12 +90,48 @@
     <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
     <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
     <div class="spacer"></div>
+    <button class="btn" id="pause">Пауза</button>
     <button class="btn" id="restart">Заново</button>
   </div>
 
   <div class="hint">
     <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
-    <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим.  🟡 корм/монеты  🔴 мины  🟣 вирус  🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+    <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим.  🟡 корм/монеты  🔴 мины  🟣 вирус  🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)
+  <div id="onlinePanel" style="
+    position:fixed; right:16px; top:86px; z-index:9999;
+    width:280px; padding:12px;
+    border-radius:16px; background:rgba(10, 14, 28, .62);
+    border:1px solid rgba(90, 140, 255, .15);
+    color:#EAF1FF; backdrop-filter: blur(12px);
+    box-shadow: 0 20px 70px rgba(0,0,0,.45);
+    pointer-events:auto;
+  ">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <div style="font-weight:800;">🌐 TOP дня</div>
+      <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
+    </div>
+
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <input id="onlineName" maxlength="18" placeholder="Ник" style="
+        flex:1; padding:8px 10px; border-radius:12px;
+        border:1px solid rgba(255,255,255,0.14);
+        background:rgba(0,0,0,0.25); color:#fff; outline:none;
+      "/>
+      <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
+      <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
+    </div>
+
+    <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
+      Призрак дня: загрузка…
+    </div>
+
+    <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+
+    <div style="margin-top:10px; font-size:11px; opacity:.65;">
+      Отправка результата — автоматически при поражении.
+    </div>
+  </div>
+</div>
   </div>
 
   <div class="centerMsg" id="overlay">
@@ -142,6 +178,17 @@
   const elLv = document.getElementById('lv');
   const elBest = document.getElementById('best');
   const btnRestart = document.getElementById('restart');
+
+  const btnPause = document.getElementById('pause');
+
+  // Online UI
+  const onlineSeedEl = document.getElementById('onlineSeed');
+  const onlineNameEl = document.getElementById('onlineName');
+  const onlineSaveBtn = document.getElementById('onlineSave');
+  const onlineRefreshBtn = document.getElementById('onlineRefresh');
+  const onlineGhostEl = document.getElementById('onlineGhost');
+  const onlineTopEl = document.getElementById('onlineTop');
+
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
 
@@ -201,10 +248,173 @@
 // ==========================
   // Game config
   // ==========================
-  const SEED = (Date.now() & 0xffffffff) >>> 0;      // session seed
+  // Daily seed (UTC) for shared "challenge of the day".
+  // You can override with ?seed=777 in the URL.
+  function dailySeedUTC() {
+    const d = new Date();
+    return d.getUTCFullYear()*10000 + (d.getUTCMonth()+1)*100 + d.getUTCDate();
+  }
+  const SEED = (() => {
+    const qs = new URLSearchParams(location.search).get('seed');
+    const n = Number(qs);
+    if (Number.isFinite(n) && n > 0) return (n >>> 0);
+    return (dailySeedUTC() >>> 0);
+  })();
+  const MODE = 'score';
   const CHUNK = 900;                                 // world chunk size
   const VIEW_PAD = 1400;                             // generate slightly beyond screen
   const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
+
+  // ==========================
+  // Online leaderboard + ghost (Cloudflare Pages Functions)
+  // ==========================
+  const ONLINE = {
+    name: (localStorage.getItem('newsnake_name') || '').slice(0,18),
+    top: [],
+    ghost: null,       // last fetched ghost row
+    ghostPath: [],     // parsed points [[tMs,x,y,r],...]
+    ghostIdx: 0,
+    rec: [],
+    recAcc: 0,
+    lastRefreshAt: 0,
+  };
+
+  function onlineSetName(n) {
+    n = String(n || '').trim().slice(0,18);
+    if (!n) return;
+    ONLINE.name = n;
+    localStorage.setItem('newsnake_name', n);
+  }
+
+  function onlineInitUI() {
+    if (onlineSeedEl) onlineSeedEl.textContent = `seed ${SEED}`;
+    if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
+    if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
+    if (onlineNameEl) onlineNameEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') onlineSetName(onlineNameEl.value); });
+    if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
+  }
+
+  function onlineRenderTop() {
+    if (!onlineTopEl) return;
+    onlineTopEl.innerHTML = '';
+    for (const row of ONLINE.top) {
+      const li = document.createElement('li');
+      li.style.margin = '0 0 6px 0';
+      li.innerHTML = `<b>${row.name}</b> <span style="opacity:.75">— ${row.score}</span>`;
+      onlineTopEl.appendChild(li);
+    }
+    if (!ONLINE.top.length) {
+      const li = document.createElement('li');
+      li.style.opacity = '0.7';
+      li.textContent = 'Пока пусто. Стань первым 🙂';
+      onlineTopEl.appendChild(li);
+    }
+  }
+
+  function onlineRenderGhostLabel() {
+    if (!onlineGhostEl) return;
+    if (!ONLINE.ghost) { onlineGhostEl.textContent = 'Призрак дня: нет данных'; return; }
+    const sc = (ONLINE.ghost.best_score ?? ONLINE.ghost.score ?? ONLINE.ghost.time_ms ?? 0);
+    onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} (${sc})`;
+  }
+
+  async function onlineRefresh() {
+    try {
+      const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=10`);
+      const topJson = await topRes.json();
+      ONLINE.top = topJson.rows || topJson.top || [];
+      onlineRenderTop();
+    } catch (e) {}
+
+    try {
+      const gRes = await fetch(`/api/ghost?seed=${SEED}&mode=${MODE}`);
+      const gJson = await gRes.json();
+      ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
+      ONLINE.ghostPath = [];
+      ONLINE.ghostIdx = 0;
+
+      if (ONLINE.ghost && ONLINE.ghost.ghost) {
+        const parsed = JSON.parse(ONLINE.ghost.ghost);
+        if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
+      }
+      onlineRenderGhostLabel();
+    } catch (e) {
+      ONLINE.ghost = null;
+      ONLINE.ghostPath = [];
+      ONLINE.ghostIdx = 0;
+      onlineRenderGhostLabel();
+    }
+
+    ONLINE.lastRefreshAt = performance.now();
+  }
+
+  function onlineGhostReset() {
+    ONLINE.rec = [];
+    ONLINE.recAcc = 0;
+  }
+
+  function onlineGhostRecord(dt) {
+    ONLINE.recAcc += dt;
+    if (ONLINE.recAcc < 0.18) return; // ~5-6 точек/сек
+    ONLINE.recAcc = 0;
+    ONLINE.rec.push([Math.floor(timeSurv*1000), Math.round(player.x), Math.round(player.y), Math.round(player.r)]);
+    if (ONLINE.rec.length > 2400) ONLINE.rec.shift();
+  }
+
+  function onlineGhostStep() {
+    if (!ONLINE.ghostPath.length) return;
+    const tMs = Math.floor(timeSurv*1000);
+    while (ONLINE.ghostIdx + 1 < ONLINE.ghostPath.length && ONLINE.ghostPath[ONLINE.ghostIdx + 1][0] <= tMs) {
+      ONLINE.ghostIdx++;
+    }
+  }
+
+  function onlineGhostDraw(sx, sy) {
+    if (!ONLINE.ghostPath.length) return;
+    const p = ONLINE.ghostPath[ONLINE.ghostIdx];
+    if (!p) return;
+    const x = sx(p[1]), y = sy(p[2]);
+    const r = Math.max(10, p[3] * 0.95);
+
+    ctx.save();
+    ctx.globalAlpha = 0.26;
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 2 * DPR;
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,TAU);
+    ctx.stroke();
+
+    // subtle inner glow
+    const glow = ctx.createRadialGradient(x,y,1, x,y, r*2.4);
+    glow.addColorStop(0, 'rgba(255,255,255,0.10)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x,y,r*2.4,0,TAU); ctx.fill();
+
+    ctx.restore();
+  }
+
+  async function onlineSubmitResult() {
+    try {
+      const payload = {
+        name: ONLINE.name || 'anon',
+        seed: SEED,
+        mode: MODE,
+        score: (player.score|0),
+        time_ms: Math.floor(timeSurv * 1000),
+        coins: (player.coins|0),
+        version: 'newsnake-pages-v1',
+        ghost: JSON.stringify(ONLINE.rec),
+      };
+      await fetch('/api/submit', {
+        method: 'POST',
+        headers: {'content-type':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      await onlineRefresh();
+    } catch (e) {}
+  }
+
 
   // Entities per chunk baseline (scales with level)
   function coinsPerChunk(level){ return Math.floor(7 + level * 0.8); }
@@ -245,6 +455,9 @@
     }
     if (e.code === 'KeyQ') {
       if (state === 'RUN') ejectMass();
+    }
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+      if (state === 'RUN' || state === 'PAUSE') togglePause();
     }
   }, {passive:false});
 
@@ -410,7 +623,7 @@
   // ==========================
   // Player / Game state
   // ==========================
-  let state = 'MENU'; // MENU | RUN | DEAD
+  let state = 'MENU'; // MENU | RUN | PAUSE | DEAD
 
   const player = {
     x: 0, y: 0,
@@ -513,6 +726,26 @@
   // ==========================
   // Start / Restart
   // ==========================
+
+  function showPauseOverlay() {
+    overlay.style.display = 'flex';
+    overlay.querySelector('h2').textContent = 'Пауза ⏸️';
+    const ps = overlay.querySelectorAll('p');
+    ps[0].innerHTML = `Время: <b>${timeSurv.toFixed(1)}s</b> • Монеты: <b>${player.coins}</b> • Уровень: <b>${level}</b>`;
+    ps[1].innerHTML = `Нажми <b>Продолжить</b> (или клавиша <b>P</b>).`;
+    ps[2].innerHTML = `Хинт: чтобы рекорды шли честно — seed общий (день UTC).`;
+    overlay.querySelector('#start').textContent = 'Продолжить';
+  }
+
+  function togglePause() {
+    if (state === 'RUN') {
+      state = 'PAUSE';
+      showPauseOverlay();
+    } else if (state === 'PAUSE') {
+      state = 'RUN';
+      overlay.style.display = 'none';
+    }
+  }
   function resetGame() {
     player.x = 0; player.y = 0;
     player.vx = 0; player.vy = 0;
@@ -542,6 +775,7 @@
     // place pointer in center if not moved
     if (!hasPointer) { mouseX = (W/DPR/2)*DPR; mouseY = (H/DPR/2)*DPR; }
 
+    onlineGhostReset();
     updateHUD();
   }
 
@@ -550,8 +784,17 @@
     state = 'RUN';
     resetGame();
   });
+  btnPause.addEventListener('click', ()=>{
+    if (state === 'RUN' || state === 'PAUSE') togglePause();
+  });
+
 
   btnStart.addEventListener('click', ()=>{
+    // If we are paused -> resume, do NOT reset.
+    if (state === 'PAUSE') {
+      togglePause();
+      return;
+    }
     overlay.style.display = 'none';
     state = 'RUN';
     resetGame();
@@ -842,6 +1085,8 @@
 
     if (state === 'RUN') {
       timeSurv += dt;
+      onlineGhostRecord(dt);
+      onlineGhostStep();
 	  player.torchTime = Math.max(0, player.torchTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
 
@@ -924,6 +1169,8 @@
 
       // FX update
       updateFX(dt);
+
+      if (performance.now() - (ONLINE.lastRefreshAt || 0) > 30000) onlineRefresh();
 
       // update HUD
       updateHUD();
@@ -1350,6 +1597,8 @@ if (ch.hunters) {
 
     if (player.hp <= 0) {
       state = 'DEAD';
+      // submit score + ghost to online leaderboard
+      onlineSubmitResult();
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
       if (timeSurv > bestNow) {
         localStorage.setItem(BEST_KEY, String(timeSurv));
@@ -1580,6 +1829,9 @@ if (ch.hunters) {
     if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
     drawPellet(x,y,p.r);
   }
+
+  // ghost (online)
+  onlineGhostDraw(sx, sy);
 
   // player (world)
   drawPlayer(sx(player.x), sy(player.y), player.r);
@@ -2221,6 +2473,9 @@ function drawPlayerOutline(x,y,r){
   // ==========================
   // Boot
   // ==========================
+  onlineInitUI();
+  onlineRefresh();
+
   resetGame();
   requestAnimationFrame(loop);
 })();
