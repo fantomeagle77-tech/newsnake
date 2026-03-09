@@ -1754,6 +1754,9 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.9, 70*DPR, 150*DPR); // rounded head radius
   const featherPx = 28 * DPR;                 // blur for soft edge (vignette)
 
+  // small aura around player (3–4 ball radii)
+  const auraR = clamp(player.r * 3.6, 70*DPR, 280*DPR);
+
   // === 1) Draw the WORLD full-screen (it will be masked) ===
   drawBackground();
   drawStars();
@@ -1886,6 +1889,16 @@ if (ch.hunters) {
   maskCtx.filter = 'none';
   maskCtx.fillStyle = 'rgba(255,255,255,1)';
   pathFlashlightBeamMask(px, py, ang, startR, beamLen, endR2);
+  maskCtx.fill();
+
+  // aura feather
+  maskCtx.beginPath();
+  maskCtx.arc(px, py, auraR, 0, TAU);
+  maskCtx.fill();
+
+  // aura core
+  maskCtx.beginPath();
+  maskCtx.arc(px, py, auraR, 0, TAU);
   maskCtx.fill();
 
   // soft edge (vignette)
