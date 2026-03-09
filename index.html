@@ -1,0 +1,2229 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Void Run Prototype</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#070A12; overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    #wrap { position:fixed; inset:0; display:block; }
+    canvas { width:100vw; height:100vh; display:block; }
+    .hud {
+      position:fixed; left:16px; top:12px; right:16px;
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      pointer-events:none;
+    }
+    .pill {
+      pointer-events:auto;
+      background:rgba(20, 30, 60, .55);
+      border:1px solid rgba(90, 140, 255, .25);
+      color:#DDE8FF;
+      padding:10px 14px;
+      border-radius:999px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      display:flex; gap:10px; align-items:center;
+      user-select:none;
+    }
+    .pill b { color:#fff; }
+    .spacer { flex:1 1 auto; }
+    .btn {
+      pointer-events:auto;
+      cursor:pointer;
+      background:linear-gradient(135deg, rgba(70,140,255,.95), rgba(120,70,255,.95));
+      border:none; color:#fff;
+      padding:10px 14px;
+      border-radius:999px;
+      font-weight:700;
+      box-shadow: 0 12px 30px rgba(70,140,255,.25);
+    }
+    .btn:active { transform: translateY(1px); }
+    .hint {
+      position:fixed; left:16px; bottom:14px; right:16px;
+      color:rgba(220,235,255,.7);
+      font-size:13px;
+      display:flex; gap:10px; align-items:center;
+      pointer-events:none;
+    }
+    .card {
+      pointer-events:none;
+      background:rgba(10, 14, 28, .55);
+      border:1px solid rgba(90, 140, 255, .15);
+      border-radius:16px;
+      padding:10px 12px;
+      backdrop-filter: blur(10px);
+    }
+    .centerMsg {
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      pointer-events:none;
+    }
+    .centerMsg .box {
+      pointer-events:auto;
+      width:min(520px, calc(100vw - 28px));
+      background:rgba(8, 10, 18, .72);
+      border:1px solid rgba(110,160,255,.22);
+      border-radius:22px;
+      padding:18px 18px 14px;
+      color:#EAF1FF;
+      box-shadow: 0 20px 80px rgba(0,0,0,.55);
+      backdrop-filter: blur(14px);
+    }
+    .centerMsg .box h2 { margin:0 0 6px; font-size:18px; }
+    .centerMsg .box p { margin:6px 0; line-height:1.35; color:rgba(235,245,255,.82); }
+    .row { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
+    .row .btn { pointer-events:auto; }
+    a { color:#9EC2FF; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="c"></canvas>
+  </div>
+
+  <div class="hud">
+    <div class="pill"><span>⏱️</span> <b id="t">0.0s</b></div>
+    <div class="pill"><span>🪙</span> <b id="coins">0</b></div>
+    <div class="pill"><span>⚫</span> <b id="mass">1.0x</b></div>
+    <div class="pill"><span>✨</span> <b id="score">0</b></div>
+    <div class="pill"><span>❤️</span> <b id="hp">3</b></div>
+    <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
+    <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
+    <div class="spacer"></div>
+    <button class="btn" id="restart">Заново</button>
+  </div>
+
+  <div class="hint">
+    <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
+    <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим.  🟡 корм/монеты  🔴 мины  🟣 вирус  🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+  </div>
+
+  <div class="centerMsg" id="overlay">
+    <div class="box">
+      <h2>Void Run — бесконечный мир</h2>
+      <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
+      <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
+      <p>Нажми <b>Старт</b>. Потом можно деплоить на Cloudflare Pages.</p>
+      <div class="row">
+        <button class="btn" id="start">Старт</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ==========================
+  // Canvas / Resize
+  // ==========================
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const maskCanvas = document.createElement('canvas');
+  const maskCtx = maskCanvas.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+
+  function resize() {
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(window.innerWidth * DPR);
+    H = Math.floor(window.innerHeight * DPR);
+    canvas.width = W; canvas.height = H;
+    maskCanvas.width = W; maskCanvas.height = H;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ==========================
+  // HUD elements
+  // ==========================
+  const elT = document.getElementById('t');
+  const elCoins = document.getElementById('coins');
+  const elMass = document.getElementById('mass');
+  const elScore = document.getElementById('score');
+  const elHP = document.getElementById('hp');
+  const elLv = document.getElementById('lv');
+  const elBest = document.getElementById('best');
+  const btnRestart = document.getElementById('restart');
+  const overlay = document.getElementById('overlay');
+  const btnStart = document.getElementById('start');
+
+  // Best time (local)
+  const BEST_KEY = 'voidrun_best_time';
+  const best = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
+  elBest.textContent = best.toFixed(1) + 's';
+
+  // ==========================
+  // Utils
+  // ==========================
+  const TAU = Math.PI * 2;
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const dist2 = (ax,ay,bx,by)=>{ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; };
+
+  // Deterministic RNG per chunk
+  function hash2i(x, y, seed) {
+    // mix ints -> uint32
+    let h = (x|0) * 374761393 ^ (y|0) * 668265263 ^ (seed|0) * 1274126177;
+    h = (h ^ (h >>> 13)) >>> 0;
+    h = Math.imul(h, 1274126177) >>> 0;
+    return h >>> 0;
+  }
+  function mulberry32(a) {
+    return function() {
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+  }
+
+  
+  // ==========================
+  // Biomes (agar-style variety)
+  // ==========================
+  const BIOMES = {
+    void:   {name:'Void',   bg:['#05060A','#030409','#020208'], starA:'rgba(255,255,255,0.28)', starB:'rgba(160,200,255,0.40)', tint:'rgba(120,180,255,0.00)'},
+    nebula: {name:'Nebula', bg:['#120626','#09051C','#050312'], starA:'rgba(255,220,255,0.30)', starB:'rgba(180,140,255,0.45)', tint:'rgba(160,80,255,0.06)'},
+    ice:    {name:'Ice',    bg:['#041225','#030B18','#02060D'], starA:'rgba(220,245,255,0.30)', starB:'rgba(120,210,255,0.45)', tint:'rgba(80,200,255,0.05)'},
+    toxic:  {name:'Toxic',  bg:['#07150E','#04100A','#020806'], starA:'rgba(190,255,210,0.25)', starB:'rgba(110,255,180,0.40)', tint:'rgba(90,255,170,0.05)'},
+    lava:   {name:'Lava',   bg:['#1A0707','#100404','#060202'], starA:'rgba(255,210,180,0.22)', starB:'rgba(255,120,90,0.45)',  tint:'rgba(255,90,80,0.05)'},
+  };
+
+  function biomeOf(cx, cy) {
+    const h = hash2i(cx, cy, (SEED ^ 0xA53F9C1) >>> 0);
+    const v = h % 100;
+    if (v < 30) return 'void';
+    if (v < 55) return 'nebula';
+    if (v < 75) return 'ice';
+    if (v < 90) return 'toxic';
+    return 'lava';
+  }
+
+  let currentBiome = 'void';
+// ==========================
+  // Game config
+  // ==========================
+  const SEED = (Date.now() & 0xffffffff) >>> 0;      // session seed
+  const CHUNK = 900;                                 // world chunk size
+  const VIEW_PAD = 1400;                             // generate slightly beyond screen
+  const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
+
+  // Entities per chunk baseline (scales with level)
+  function coinsPerChunk(level){ return Math.floor(7 + level * 0.8); }
+  function minesPerChunk(level){ return Math.floor(4 + level * 0.9); }
+
+  // ==========================
+  // Input (mouse)
+  // ==========================
+  let mouseX = 0, mouseY = 0;
+  let hasPointer = false;
+  window.addEventListener('mousemove', (e)=>{
+    hasPointer = true;
+    mouseX = e.clientX * DPR;
+    mouseY = e.clientY * DPR;
+  }, {passive:true});
+
+  // Touch support (optional)
+  window.addEventListener('touchstart', (e)=>{
+    if (!e.touches.length) return;
+    hasPointer = true;
+    mouseX = e.touches[0].clientX * DPR;
+    mouseY = e.touches[0].clientY * DPR;
+  }, {passive:true});
+  window.addEventListener('touchmove', (e)=>{
+    if (!e.touches.length) return;
+    hasPointer = true;
+    mouseX = e.touches[0].clientX * DPR;
+    mouseY = e.touches[0].clientY * DPR;
+  }, {passive:true});
+
+  // Dash (space)
+  let dashReady = true;
+  let dashCd = 0;
+  window.addEventListener('keydown', (e)=>{
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (dashReady && state === 'RUN') doDash();
+    }
+    if (e.code === 'KeyQ') {
+      if (state === 'RUN') ejectMass();
+    }
+  }, {passive:false});
+
+  // ==========================
+  // World storage (LRU)
+  // ==========================
+  const chunkMap = new Map();     // key -> { coins:[], mines:[], t:tick }
+  const collected = new Set();    // collected coin ids (key:index)
+  let tickCounter = 0;
+
+  function chunkKey(cx, cy){ return cx + ',' + cy; }
+
+  function getChunk(cx, cy, level) {
+    const key = chunkKey(cx,cy);
+    let c = chunkMap.get(key);
+    if (c) { c.t = tickCounter; return c; }
+
+    // Generate new chunk deterministically
+    const h = hash2i(cx, cy, SEED);
+    const rnd = mulberry32(h);
+
+    const baseX = cx * CHUNK;
+    const baseY = cy * CHUNK;
+
+    const coins = [];
+    const mines = [];
+    const torches = [];
+    const mimics = [];
+    const viruses = [];
+    const cells = [];
+    const hunters = [];
+    const slimes = [];
+
+    let nC = coinsPerChunk(level);
+    let nM = minesPerChunk(level);
+
+    const biome = biomeOf(cx, cy);
+    // biome spawn tweaks
+    if (biome === 'nebula') { nC += 3; nM = Math.max(2, nM - 1); }
+    if (biome === 'lava')   { nM += 2; nC = Math.max(3, nC - 1); }
+    if (biome === 'toxic')  { nM += 1; }
+    if (biome === 'ice')    { nC += 1; }
+
+    
+    // slime puddles (sticky zone) in toxic biome
+    if (biome === 'toxic' && rnd() < 0.75) {
+      const count = 1 + (rnd() < 0.35 ? 1 : 0);
+      for (let i=0;i<count;i++){
+        const x = baseX + rnd()*CHUNK;
+        const y = baseY + rnd()*CHUNK;
+        const r = 140 + rnd()*140;
+        const id = key + ':s:' + i;
+        slimes.push({x,y,r,id,phase:rnd()*TAU});
+      }
+    }
+
+// coins
+    for (let i=0;i<nC;i++){
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const r = 10 + rnd()*6;
+      const id = key + ':c:' + i;
+      coins.push({x,y,r,id});
+    }
+
+    // mines
+    for (let i=0;i<nM;i++){
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const r = 22 + rnd()*10;
+      const phase = rnd()*TAU;
+      const drift = 0.25 + rnd()*0.85;
+      mines.push({x,y,r,phase,drift});
+    }
+
+    // torch pickup (reveals area)
+    const torchP = (biome === 'nebula') ? 0.55 : (biome === 'lava' ? 0.28 : (biome === 'toxic' ? 0.30 : 0.38));
+    if (level >= 2 && rnd() < torchP) {
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const id = key + ':t:0';
+      torches.push({x,y,r:14,id});
+    }
+
+    // mimic coin (trap)
+    const mimicP = (biome === 'toxic') ? 0.30 : (biome === 'lava' ? 0.22 : 0.16);
+    if (level >= 4 && rnd() < mimicP) {
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const id = key + ':mc:0';
+      mimics.push({x,y,r:12,id,phase:rnd()*TAU});
+    }
+
+    // virus (spiky hazard like agar virus)
+    const virusP = (biome === 'toxic') ? 0.52 : (biome === 'nebula' ? 0.16 : (biome === 'lava' ? 0.26 : 0.22));
+    if (level >= 3 && rnd() < virusP) {
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const id = key + ':v:0';
+      const r = 22 + rnd()*8;
+      viruses.push({x,y,r,id,phase:rnd()*TAU});
+    }
+
+    // neutral cells (agar-style "other players")
+    const cellsP = (biome === 'nebula') ? 0.95 : (biome === 'lava' ? 0.72 : 0.84);
+    if (rnd() < cellsP) {
+      const count = 2 + Math.floor(rnd()*4);
+      for (let i=0;i<count;i++){
+        const x = baseX + rnd()*CHUNK;
+        const y = baseY + rnd()*CHUNK;
+        const rr = 14 + rnd() * (level < 7 ? 26 : 34);
+        const id = key + ':p:' + i;
+
+        const t = rnd();
+        const kind = (t < 0.60) ? 'grazer' : (t < 0.85 ? 'runner' : 'bully');
+        const hue = Math.floor(rnd()*360);
+        const skin = Math.floor(rnd()*4);
+
+        const phase = rnd()*TAU;
+        const drift = 0.30 + rnd()*0.95;
+
+        cells.push({x,y,r:rr,id,kind,hue,skin,phase,drift,vx:0,vy:0});
+      }
+    }
+
+    // hunters / predators (multiple kinds)
+    const hunterP = (biome === 'lava') ? 0.52 : (biome === 'toxic' ? 0.36 : 0.30);
+    if (level >= 2 && rnd() < hunterP) {
+      const count = 1 + (rnd() < 0.22 ? 1 : 0);
+      for (let i=0;i<count;i++){
+        const x = baseX + rnd()*CHUNK;
+        const y = baseY + rnd()*CHUNK;
+        const r = 30 + rnd() * (level < 9 ? 42 : 70);
+        const id = key + ':h:' + i;
+
+        const t = rnd();
+        let kind = 'chaser';
+        if (t < 0.40) kind = 'chaser';
+        else if (t < 0.62) kind = 'charger';
+        else if (t < 0.82) kind = 'leech';
+        else kind = 'lurker';
+
+        const hue = Math.floor(rnd()*360);
+        const skin = Math.floor(rnd()*4);
+
+        const phase = rnd()*TAU;
+        const drift = 0.35 + rnd()*0.85;
+
+        hunters.push({x,y,r,id,kind,hue,skin,phase,drift,cd:0,charge:0,dirx:0,diry:0});
+      }
+    }
+
+    c = {biome, coins, mines, torches, mimics, viruses, cells, hunters, slimes, t: tickCounter};
+    chunkMap.set(key, c);
+
+    if (chunkMap.size > MAX_CHUNKS_KEEP) {
+      const arr = [...chunkMap.entries()].sort((a,b)=>a[1].t - b[1].t);
+      for (let k=0; k<Math.min(20, arr.length); k++) chunkMap.delete(arr[k][0]);
+    }
+    return c;
+  }
+
+  // ==========================
+  // Player / Game state
+  // ==========================
+  let state = 'MENU'; // MENU | RUN | DEAD
+
+  const player = {
+    x: 0, y: 0,
+    vx: 0, vy: 0,
+    baseR: 18,
+    r: 18,
+    hp: 3,
+    coins: 0,
+    nearMiss: 0,
+    dash: 0,
+	score: 0,
+	combo: 0,
+	comboTimer: 0,
+	torchTime: 0,
+    invulnTime: 0,
+    slowMul: 1,
+    ejectCd: 0,
+  };
+
+  // tail as list of points (world coords)
+  const tail = {
+    points: [],
+    maxLen: 0,     // grows with coins
+    spacing: 10,
+  };
+
+  // camera (world->screen)
+  const cam = { x:0, y:0 };
+
+  let timeSurv = 0;
+  let level = 1;
+
+
+  // ==========================
+  // Swarms + Boss (wow moments)
+  // ==========================
+  const swarms = []; // list of drones {x,y,vx,vy,r,kind,hue,ttl}
+  let swarmCd = 6.0;
+
+  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0};
+
+
+  // ==========================
+  // FX (particles + shake)
+  // ==========================
+  const fx = [];
+  const pellets = []; // bait / ejected mass
+  let shakeT = 0;
+  let shakeA = 0;
+
+  function kickShake(a, t) {
+    shakeA = Math.max(shakeA, a);
+    shakeT = Math.max(shakeT, t);
+  }
+
+  function spawnBurst(wx, wy, hue, count=14, baseSpeed=220) {
+    for (let i=0;i<count;i++){
+      const a = Math.random() * TAU;
+      const s = baseSpeed * (0.35 + Math.random()*0.85);
+      fx.push({
+        x: wx, y: wy,
+        vx: Math.cos(a)*s,
+        vy: Math.sin(a)*s,
+        life: 0.55 + Math.random()*0.35,
+        r: 2.5 + Math.random()*3.5,
+        hue
+      });
+    }
+  }
+
+  function updateFX(dt){
+    for (let i=fx.length-1;i>=0;i--){
+      const p = fx[i];
+      p.life -= dt;
+      if (p.life <= 0){ fx.splice(i,1); continue; }
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+    }
+    shakeT = Math.max(0, shakeT - dt);
+    if (shakeT <= 0) shakeA = 0;
+  }
+
+  function drawFX(sx, sy){
+    if (!fx.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of fx){
+      const x = sx(p.x), y = sy(p.y);
+      const g = ctx.createRadialGradient(x,y,0,x,y,p.r*5);
+      g.addColorStop(0, `hsla(${p.hue},100%,70%,0.55)`);
+      g.addColorStop(1, `hsla(${p.hue},100%,60%,0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x,y,p.r*5,0,TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ==========================
+  // Start / Restart
+  // ==========================
+  function resetGame() {
+    player.x = 0; player.y = 0;
+    player.vx = 0; player.vy = 0;
+    player.hp = 3;
+    player.coins = 0;
+    player.nearMiss = 0;
+    player.baseR = 18;
+    player.r = 18;
+
+    player.score = 0;
+    player.combo = 0;
+    player.comboTimer = 0;
+    player.torchTime = 0;
+    player.invulnTime = 0;
+
+    tail.points.length = 0;
+    tail.maxLen = 0;
+
+    timeSurv = 0;
+    level = 1;
+
+    chunkMap.clear();
+    collected.clear();
+    dashReady = true;
+    dashCd = 0;
+
+    // place pointer in center if not moved
+    if (!hasPointer) { mouseX = (W/DPR/2)*DPR; mouseY = (H/DPR/2)*DPR; }
+
+    updateHUD();
+  }
+
+  btnRestart.addEventListener('click', ()=>{
+    overlay.style.display = 'none';
+    state = 'RUN';
+    resetGame();
+  });
+
+  btnStart.addEventListener('click', ()=>{
+    overlay.style.display = 'none';
+    state = 'RUN';
+    resetGame();
+  });
+
+  function updateHUD() {
+    elT.textContent = timeSurv.toFixed(1) + 's';
+    elCoins.textContent = player.coins;
+    elHP.textContent = player.hp;
+    elLv.textContent = level;
+    elScore.textContent = player.score | 0;
+    elMass.textContent = (player.r / player.baseR).toFixed(2) + 'x';
+  }
+
+  
+  // ==========================
+  // Swarm / Boss logic
+  // ==========================
+  function spawnSwarmWave(kind='food') {
+    // spawn from random direction outside the beam for surprise
+    const a = Math.random() * TAU;
+    const dist = 1400 + Math.random() * 500;
+    const cx = player.x + Math.cos(a) * dist;
+    const cy = player.y + Math.sin(a) * dist;
+
+    const count = (kind === 'piranha') ? (10 + Math.floor(Math.random()*10)) : (8 + Math.floor(Math.random()*10));
+    const hue = (kind === 'piranha') ? 350 : 200;
+
+    // direction toward player-ish, but with spread
+    const tx = player.x + (Math.random()-0.5)*500;
+    const ty = player.y + (Math.random()-0.5)*500;
+    const dx = tx - cx, dy = ty - cy;
+    const d = Math.hypot(dx,dy) || 1;
+    const nx = dx/d, ny = dy/d;
+
+    const baseSp = (kind === 'piranha') ? (260 + level*6) : (220 + level*4);
+
+    for (let i=0;i<count;i++){
+      const offA = a + (Math.random()-0.5) * 0.9;
+      const ox = cx + Math.cos(offA) * (30 + Math.random()*120);
+      const oy = cy + Math.sin(offA) * (30 + Math.random()*120);
+      const r = (kind === 'piranha') ? (10 + Math.random()*6) : (9 + Math.random()*5);
+
+      // slight formation spread
+      const sp = baseSp * (0.75 + Math.random()*0.6);
+      swarms.push({
+        x: ox, y: oy,
+        vx: nx*sp + (Math.random()-0.5)*90,
+        vy: ny*sp + (Math.random()-0.5)*90,
+        r,
+        kind,
+        hue: hue + Math.floor((Math.random()-0.5)*30),
+        ttl: 10.0 + Math.random()*4.0
+      });
+    }
+    kickShake(6, 0.10);
+  }
+
+  function updateSwarms(dt) {
+    swarmCd -= dt;
+    if (swarmCd <= 0) {
+      // frequency scales with level and biome
+      const b = currentBiome;
+      const base = (b === 'lava') ? 5.2 : (b === 'nebula' ? 6.6 : 6.0);
+      swarmCd = base + Math.random() * 4.0;
+
+      const roll = Math.random();
+      const kind = (level >= 6 && roll < 0.55) ? 'piranha' : 'food';
+      spawnSwarmWave(kind);
+    }
+
+    for (let i=swarms.length-1; i>=0; i--){
+      const s = swarms[i];
+      s.ttl -= dt;
+      if (s.ttl <= 0) { swarms.splice(i,1); continue; }
+
+      // steer a bit toward player (piranhas more)
+      const dx = player.x - s.x;
+      const dy = player.y - s.y;
+      const d = Math.hypot(dx,dy) || 1;
+      const steer = (s.kind === 'piranha') ? 120 : 60;
+      s.vx += (dx/d) * steer * dt;
+      s.vy += (dy/d) * steer * dt;
+
+      // drag
+      s.vx *= 0.985;
+      s.vy *= 0.985;
+
+      // move
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+
+      // collisions
+      const rr = player.r + s.r;
+      if (dist2(player.x, player.y, s.x, s.y) < rr*rr) {
+        if (s.kind === 'food' && player.r > s.r * 1.15) {
+          // eat
+          swarms.splice(i,1);
+          player.coins += 1;
+          player.score += 8;
+          spawnBurst(s.x, s.y, s.hue, 8, 180);
+          continue;
+        } else {
+          // piranha bite (even if small)
+          if (player.invulnTime <= 0) {
+            player.invulnTime = 0.35;
+            player.hp = Math.max(0, player.hp - 1);
+            loseTailSegments(260);
+            player.coins = Math.max(0, player.coins - 4);
+            kickShake(12, 0.12);
+            spawnBurst(player.x, player.y, 350, 14, 240);
+            if (player.hp <= 0) {
+              player.invulnTime = 0;
+              player.hp = 1;
+              damagePlayer();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function spawnBoss() {
+    const a = Math.random() * TAU;
+    const dist = 2400 + Math.random()*1000;
+    boss.x = player.x + Math.cos(a)*dist;
+    boss.y = player.y + Math.sin(a)*dist;
+    boss.r = Math.max(260, player.r * 2.4);
+    boss.vx = 0;
+    boss.vy = 0;
+    boss.ttl = 18.0;
+    boss.phase = Math.random()*TAU;
+    boss.active = true;
+    kickShake(10, 0.16);
+  }
+
+  function updateBoss(dt) {
+    boss.cd = Math.max(0, boss.cd - dt);
+    if (!boss.active && level >= 5 && boss.cd <= 0) {
+      // spawn boss sometimes (wow moment)
+      const chance = (level % 5 === 0) ? 0.55 : 0.18;
+      if (Math.random() < chance) {
+        spawnBoss();
+        boss.cd = 22.0;
+      } else {
+        boss.cd = 8.0 + Math.random()*8.0;
+      }
+    }
+
+    if (!boss.active) return;
+
+    boss.ttl -= dt;
+    if (boss.ttl <= 0) {
+      boss.active = false;
+      return;
+    }
+
+    // chase player
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const d = Math.hypot(dx,dy) || 1;
+    const nx = dx/d, ny = dy/d;
+
+    // boss speed scales with level and biome
+    const b = currentBiome;
+    let sp = 140 + level*8;
+    if (b === 'ice') sp += 20;
+    if (b === 'lava') sp += 35;
+
+    // wobble
+    boss.phase += dt * 1.2;
+    const wx = Math.cos(boss.phase) * 35;
+    const wy = Math.sin(boss.phase*1.1) * 35;
+
+    boss.vx = boss.vx*0.88 + (nx*sp + wx)*0.24;
+    boss.vy = boss.vy*0.88 + (ny*sp + wy)*0.24;
+
+    boss.x += boss.vx * dt;
+    boss.y += boss.vy * dt;
+
+    // wow feedback when close
+    if (d < 1400) {
+      player.nearMiss += dt * 2.2;
+      kickShake(8, 0.10);
+    }
+    if (d < 900) {
+      kickShake(14, 0.14);
+    }
+
+    // collision: you almost never can eat it, but if you become huge -> reward
+    const rr = player.r + boss.r;
+    if (dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
+      if (player.r > boss.r * 1.18) {
+        // eat boss (rare!)
+        boss.active = false;
+        player.coins += 80;
+        player.score += 1800;
+        player.hp = Math.min(6, player.hp + 2);
+        spawnBurst(boss.x, boss.y, 30, 40, 320);
+        kickShake(20, 0.22);
+      } else {
+        // brutal hit
+        player.invulnTime = 0;
+        player.hp = 1;
+        damagePlayer();
+      }
+    }
+  }
+
+// ==========================
+  // Mechanics
+  // ==========================
+  function doDash() {
+    // dash in direction of mouse target
+    const tx = cam.x + (mouseX - W/2);
+    const ty = cam.y + (mouseY - H/2);
+    const dx = tx - player.x;
+    const dy = ty - player.y;
+    const d = Math.hypot(dx,dy) || 1;
+    const nx = dx / d, ny = dy / d;
+
+    // impulse
+    player.vx += nx * 520;
+    player.vy += ny * 520;
+
+    dashReady = false;
+    dashCd = 1.0; // seconds
+  }
+
+  function ejectMass() {
+    if (player.ejectCd > 0) return;
+    if (player.coins <= 0) return;
+
+    // consume one coin as mass
+    player.coins -= 1;
+    player.score = Math.max(0, player.score - 2);
+    player.ejectCd = 0.18;
+
+    // aim direction (world)
+    const tx = cam.x + (mouseX - W/2);
+    const ty = cam.y + (mouseY - H/2);
+    const dx = tx - player.x;
+    const dy = ty - player.y;
+    const d = Math.hypot(dx,dy) || 1;
+    const nx = dx/d, ny = dy/d;
+
+    const speed = 980;
+    pellets.push({
+      x: player.x + nx*(player.r+10),
+      y: player.y + ny*(player.r+10),
+      vx: nx*speed + player.vx*0.25,
+      vy: ny*speed + player.vy*0.25,
+      r: 8,
+      ttl: 4.2
+    });
+  }
+
+
+  function applyTail() {
+    // Add current position to tail points
+    const last = tail.points[tail.points.length - 1];
+    if (!last || dist2(last.x,last.y, player.x, player.y) > tail.spacing*tail.spacing) {
+      tail.points.push({x:player.x, y:player.y});
+    }
+    // Trim by maxLen
+    const maxPts = Math.max(0, Math.floor(tail.maxLen / tail.spacing));
+    if (tail.points.length > maxPts) {
+      tail.points.splice(0, tail.points.length - maxPts);
+    }
+  }
+
+  function loseTailSegments(amount) {
+    // amount in "length units"
+    tail.maxLen = Math.max(0, tail.maxLen - amount);
+    const maxPts = Math.max(0, Math.floor(tail.maxLen / tail.spacing));
+    if (tail.points.length > maxPts) tail.points.splice(0, tail.points.length - maxPts);
+  }
+
+  // ==========================
+  // Main loop
+  // ==========================
+  let lastTs = performance.now();
+
+  function loop(ts) {
+    const dt = Math.min(0.033, (ts - lastTs) / 1000);
+    lastTs = ts;
+    tickCounter++;
+
+    if (state === 'RUN') {
+      timeSurv += dt;
+	  player.torchTime = Math.max(0, player.torchTime - dt);
+      player.invulnTime = Math.max(0, player.invulnTime - dt);
+
+      // Level scaling: every ~12s
+      level = 1 + Math.floor(timeSurv / 12);
+	  if (player.coins >= 30) level = Math.max(level, 6);
+	  if (player.coins >= 60) level = Math.max(level, 10);
+	  if (player.coins >= 90) level = Math.max(level, 14);
+      // Visibility shrinks a bit with level
+      // Difficulty: higher acceleration but less control СКОРОСТЬ ИГРОКА
+      let acc = lerp(2200, 3400, clamp(level/20, 0, 1));
+	  let maxSpeed = lerp(900, 1250, clamp(level/30, 0, 1));
+	  let friction = lerp(0.90, 0.86, clamp(level/35, 0, 1));
+
+      // biome feel tweaks (variety)
+      currentBiome = biomeOf(Math.floor(player.x / CHUNK), Math.floor(player.y / CHUNK));
+      if (currentBiome === 'ice')   { friction += 0.025; maxSpeed += 90; }
+      if (currentBiome === 'lava')  { acc += 260; }
+      if (currentBiome === 'toxic') { acc -= 180; }
+      if (currentBiome === 'nebula'){ maxSpeed += 40; }
+
+      // sticky zones slow you down
+      acc *= player.slowMul;
+      maxSpeed *= player.slowMul;
+
+
+            // Eject cooldown
+      player.ejectCd = Math.max(0, player.ejectCd - dt);
+
+// Dash cooldown
+      if (!dashReady) {
+        dashCd -= dt;
+        if (dashCd <= 0) dashReady = true;
+      }
+
+      // Move target in WORLD coords: cursor relative to screen center
+      const targetX = cam.x + (mouseX - W/2);
+      const targetY = cam.y + (mouseY - H/2);
+
+      // Inertia follow
+      const dx = targetX - player.x;
+      const dy = targetY - player.y;
+
+      player.vx += dx * acc * dt / 1000;
+      player.vy += dy * acc * dt / 1000;
+
+      // clamp speed
+      const sp = Math.hypot(player.vx, player.vy);
+      if (sp > maxSpeed) {
+        player.vx = player.vx / sp * maxSpeed;
+        player.vy = player.vy / sp * maxSpeed;
+      }
+
+      // friction
+      player.vx *= friction;
+      player.vy *= friction;
+
+      // integrate
+      player.x += player.vx * dt;
+      player.y += player.vy * dt;
+
+      // player size grows with coins, but also slowly relaxes
+      const targetR = player.baseR + Math.sqrt(player.coins) * 3.6;
+      player.r = lerp(player.r, targetR, 0.08);
+
+      // camera follows player smoothly
+      cam.x = lerp(cam.x, player.x, 0.12);
+      cam.y = lerp(cam.y, player.y, 0.12);
+
+      // Tail length grows with coins (and a bit with time)
+      tail.maxLen = Math.max(tail.maxLen, player.coins * 16);
+      applyTail();
+
+      // Swarms + Boss updates (wow moments)
+      updateBoss(dt);
+      updateSwarms(dt);
+
+      // World interactions near player
+      stepWorld(dt);
+
+      // FX update
+      updateFX(dt);
+
+      // update HUD
+      updateHUD();
+    }
+
+    render();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ==========================
+  // World update / collisions
+  // ==========================
+  function stepWorld(dt) {
+    const viewW = (W / DPR);
+    const viewH = (H / DPR);
+    const halfW = (W/2);
+    const halfH = (H/2);
+
+    // Determine chunk range based on camera & view
+    const pad = VIEW_PAD;
+    const minX = cam.x - (halfW + pad);
+    const maxX = cam.x + (halfW + pad);
+    const minY = cam.y - (halfH + pad);
+    const maxY = cam.y + (halfH + pad);
+
+    const cx0 = Math.floor(minX / CHUNK);
+    const cx1 = Math.floor(maxX / CHUNK);
+    const cy0 = Math.floor(minY / CHUNK);
+    const cy1 = Math.floor(maxY / CHUNK);
+
+    // near miss accumulation
+    player.comboTimer = Math.max(0, player.comboTimer - dt);
+	if (player.comboTimer === 0) player.combo = 0;
+	player.nearMiss = Math.max(0, player.nearMiss - dt * 1.1);
+    let inSlime = false;
+
+    const sizeRatio = player.r / player.baseR;
+    const mineScale = clamp(1 / Math.sqrt(sizeRatio), 0.45, 1.0); // mines get smaller as you grow
+    const trapScale = clamp(1 / Math.sqrt(sizeRatio), 0.55, 1.0); // traps/viruses shrink too
+
+    let hitThisFrame = false;
+
+    for (let cy=cy0; cy<=cy1; cy++) {
+      for (let cx=cx0; cx<=cx1; cx++) {
+        const ch = getChunk(cx, cy, level);
+
+        // coins
+        for (const c of ch.coins) {
+          if (collected.has(c.id)) continue;
+          
+		  // magnet to coins
+			const mdx = player.x - c.x;
+			const mdy = player.y - c.y;
+			const md2 = mdx*mdx + mdy*mdy;
+			const magnetR = 220; // радиус магнита
+			if (md2 < magnetR*magnetR) {
+			  const md = Math.sqrt(md2) || 1;
+			  const pull = (1 - md / magnetR) * 90; // сила притяжения
+			  c.x += (mdx / md) * pull * dt;
+			  c.y += (mdy / md) * pull * dt;
+			}
+		  
+		  // simple distance check
+          const rr = (player.r + c.r + 6);
+          if (dist2(player.x, player.y, c.x, c.y) < rr*rr) {
+            collected.add(c.id);
+            player.coins++;
+			player.score += 10 * Math.max(1, player.combo);
+			player.combo++;
+			
+            // tiny heal/bonus every 25 coins
+            if (player.coins % 25 === 0) player.hp = Math.min(5, player.hp + 1);
+          }
+        }
+
+		// torches (visibility boost)
+		if (ch.torches) {
+		  for (const t of ch.torches) {
+			if (collected.has(t.id)) continue;
+			const rr = player.r + t.r + 8;
+			if (dist2(player.x, player.y, t.x, t.y) < rr*rr) {
+			  collected.add(t.id);
+			  player.torchTime = 7.0; // секунд полной видимости
+			}
+		  }
+		}
+
+        // mines
+        for (const m of ch.mines) {
+          const mr = m.r * mineScale;
+          // slight motion (orbiting wobble)
+          m.phase += dt * (0.6 + level*0.02) * m.drift;
+          let mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
+		  let my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
+
+		  // hunter mode after level 10
+		  if (level >= 10) {
+		    const hx = player.x - mx;
+		    const hy = player.y - my;
+		    const hd = Math.hypot(hx, hy) || 1;
+		    const hunt = 40 + (level-10)*3; // скорость охоты
+		    mx += (hx/hd) * hunt * dt;
+		    my += (hy/hd) * hunt * dt;
+
+		    // записываем обратно, чтобы мина реально смещалась
+		    m.x = mx;
+		    m.y = my;
+		  }
+
+          // Near miss bonus (adrenaline)
+          const near = (player.r + mr + 22);
+          const near2 = near*near;
+          const d2 = dist2(player.x, player.y, mx, my);
+          if (d2 < near2 && d2 > (player.r + mr + 4) ** 2) {
+            player.nearMiss += dt * 1.6;
+			player.comboTimer = 0.9; // держим комбо пока рядом опасно
+          }
+
+          // Player hit
+          const hitR = (player.r + mr + 2);
+          if (player.invulnTime <= 0 && d2 < hitR*hitR) {
+            if (!hitThisFrame) {
+              hitThisFrame = true;
+              damagePlayer();
+            }
+          }
+
+          // Tail hit (if any)
+          if (tail.points.length > 6) {
+            // check few tail points near the end (most relevant)
+            // (cheap) sample last N
+            const N = Math.min(40, tail.points.length);
+            for (let i = tail.points.length - 1; i >= tail.points.length - N; i--) {
+              const p = tail.points[i];
+              const tr = 8; // tail thickness
+              const hr = (mr + tr);
+              if (dist2(p.x,p.y, mx,my) < hr*hr) {
+                // cut tail hard, and add adrenaline
+                loseTailSegments(140);
+                player.nearMiss += 0.25;
+                break;
+              }
+            }
+          }
+        }
+// agar-style cells (AI)
+if (ch.cells) {
+  for (const cc of ch.cells) {
+    if (collected.has(cc.id)) continue;
+
+    // wander
+    cc.phase += dt * (0.65 + level*0.02) * cc.drift;
+    const baseSp = (cc.kind === 'runner') ? 80 : (cc.kind === 'bully' ? 55 : 45);
+    let vx = Math.cos(cc.phase) * baseSp;
+    let vy = Math.sin(cc.phase*1.2) * baseSp;
+
+    const dx = player.x - cc.x;
+    const dy = player.y - cc.y;
+    const d = Math.hypot(dx, dy) || 1;
+
+    const youBigger = player.r > cc.r * 1.12;
+    const youSmaller = player.r < cc.r * 0.92;
+
+    // behavior near player
+    if (d < 650) {
+      if (youBigger) {
+        // flee
+        const flee = (cc.kind === 'bully') ? 75 : 110;
+        vx -= (dx/d) * flee;
+        vy -= (dy/d) * flee;
+      } else if (youSmaller && cc.kind === 'bully') {
+        // bully chases
+        const chase = 70 + level * 2;
+        vx += (dx/d) * chase;
+        vy += (dy/d) * chase;
+      }
+    }
+
+    // integrate (smooth)
+    cc.vx = cc.vx * 0.84 + vx * 0.32;
+    cc.vy = cc.vy * 0.84 + vy * 0.32;
+    cc.x += cc.vx * dt;
+    cc.y += cc.vy * dt;
+
+    // collisions: bigger eats smaller
+    const rr = player.r + cc.r;
+    if (player.invulnTime <= 0 && d < rr) {
+      if (player.r > cc.r * 1.12) {
+        collected.add(cc.id);
+        const gain = Math.max(2, Math.floor(cc.r / 10));
+        player.coins += gain;
+        player.score += gain * 6;
+        spawnBurst(cc.x, cc.y, cc.hue, 12, 210);
+        kickShake(6, 0.10);
+      } else if (player.r < cc.r * 0.92) {
+        damagePlayer();
+        player.coins = Math.max(0, player.coins - 6);
+      } else {
+        // bump
+        player.vx *= -0.55;
+        player.vy *= -0.55;
+      }
+    }
+  }
+}
+
+// virus (spiky hazard)
+if (ch.viruses) {
+  for (const v of ch.viruses) {
+    if (collected.has(v.id)) continue;
+    v.phase += dt * 0.9;
+
+    const dx = player.x - v.x;
+    const dy = player.y - v.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const vr = v.r * trapScale;
+    const rr = player.r + vr * 1.05;
+
+    if (d < rr) {
+      if (player.r > vr * 1.35) {
+        // eat virus, but it bites your tail (risk-reward)
+        collected.add(v.id);
+        player.coins += 10;
+        player.score += 120;
+        loseTailSegments(180);
+        spawnBurst(v.x, v.y, 285, 20, 260);
+        kickShake(8, 0.12);
+      } else if (player.invulnTime <= 0) {
+        // virus slices tail hard
+        player.invulnTime = 0.7;
+        loseTailSegments(520);
+        player.coins = Math.max(0, player.coins - 10);
+        player.vx *= -0.75;
+        player.vy *= -0.75;
+        kickShake(12, 0.16);
+        spawnBurst(player.x, player.y, 285, 18, 240);
+      }
+    }
+  }
+}
+
+// mimic coin (trap)
+if (ch.mimics) {
+  for (const mm of ch.mimics) {
+    if (collected.has(mm.id)) continue;
+    mm.phase += dt * 2.2;
+
+    const mr = mm.r * trapScale;
+    const rr = player.r + mr + 8;
+    if (dist2(player.x, player.y, mm.x, mm.y) < rr*rr) {
+      collected.add(mm.id);
+      // explode
+      damagePlayer();
+      player.coins = Math.max(0, player.coins - 12);
+      spawnBurst(mm.x, mm.y, 10, 22, 280);
+      kickShake(14, 0.18);
+
+      // spawn extra mines around (nasty surprise)
+      const count = 4 + Math.floor(Math.random()*3);
+      for (let i=0;i<count;i++){
+        const a = Math.random()*TAU;
+        const d = 90 + Math.random()*120;
+        ch.mines.push({
+          x: mm.x + Math.cos(a)*d,
+          y: mm.y + Math.sin(a)*d,
+          r: 18 + Math.random()*10,
+          phase: Math.random()*TAU,
+          drift: 0.4 + Math.random()*0.9
+        });
+      }
+    }
+  }
+}
+
+// hunters / predators (multiple kinds)
+if (ch.hunters) {
+  for (const h of ch.hunters) {
+    if (collected.has(h.id)) continue;
+
+    // timers
+    h.cd = Math.max(0, (h.cd||0) - dt);
+    h.charge = Math.max(0, (h.charge||0) - dt);
+
+    // wander
+    h.phase += dt * (0.55 + level*0.02) * h.drift;
+    let vx = Math.cos(h.phase) * 28;
+    let vy = Math.sin(h.phase*1.15) * 28;
+
+    const dx = player.x - h.x;
+    const dy = player.y - h.y;
+    const d = Math.hypot(dx, dy) || 1;
+
+    // behavior
+    if (h.kind === 'chaser') {
+      if (d < 1100) {
+        const chase = 120 + level * 6;
+        vx += (dx/d) * chase;
+        vy += (dy/d) * chase;
+      }
+    } else if (h.kind === 'lurker') {
+      // mostly idle; sudden close chase
+      if (d < 420) {
+        const chase = 150 + level * 4;
+        vx += (dx/d) * chase;
+        vy += (dy/d) * chase;
+      } else {
+        vx *= 0.25; vy *= 0.25;
+      }
+    } else if (h.kind === 'leech') {
+      // orbit and try to touch tail
+      const desired = 240;
+      const ox = player.x + (-dy/d) * desired;
+      const oy = player.y + ( dx/d) * desired;
+      const lx = ox - h.x;
+      const ly = oy - h.y;
+      const ld = Math.hypot(lx, ly) || 1;
+      const sp = 120 + level*3;
+      vx += (lx/ld) * sp;
+      vy += (ly/ld) * sp;
+
+      // extra tail pressure
+      if (tail.points.length > 8 && d < desired + 70) {
+        // sample last tail points
+        const N = Math.min(26, tail.points.length);
+        for (let i=tail.points.length-1; i>=tail.points.length-N; i--){
+          const p = tail.points[i];
+          const td2 = dist2(p.x,p.y,h.x,h.y);
+          const tr = 10;
+          if (td2 < (h.r + tr) * (h.r + tr)) {
+            loseTailSegments(180);
+            player.nearMiss += dt * 1.2;
+            break;
+          }
+        }
+      }
+    } else if (h.kind === 'charger') {
+      if (h.charge > 0) {
+        // charging burst
+        const sp = 520;
+        vx = (h.dirx || (dx/d)) * sp;
+        vy = (h.diry || (dy/d)) * sp;
+      } else if (d < 850 && h.cd <= 0) {
+        // start charge
+        h.dirx = dx/d;
+        h.diry = dy/d;
+        h.charge = 0.45;
+        h.cd = 2.2;
+        kickShake(6, 0.08);
+      } else if (d < 900) {
+        // mild chase between charges
+        const chase = 90 + level*4;
+        vx += (dx/d) * chase;
+        vy += (dy/d) * chase;
+      }
+    }
+
+    // move
+    h.x += vx * dt;
+    h.y += vy * dt;
+
+    // adrenaline when close
+    if (d < (player.r + h.r + 140)) player.nearMiss += dt * 0.9;
+
+    // collision rules: bigger eats smaller
+    const rr = player.r + h.r;
+    if (player.invulnTime <= 0 && d < rr) {
+      if (player.r > h.r * 1.15) {
+        collected.add(h.id);
+        const gain = Math.max(8, Math.floor(h.r / 7));
+        player.coins += gain;
+        player.score += gain * 10;
+        spawnBurst(h.x, h.y, h.hue || 120, 18, 260);
+        kickShake(8, 0.12);
+        if (player.coins % 40 === 0) player.hp = Math.min(6, player.hp + 1);
+      } else if (player.r < h.r * 1.08) {
+        damagePlayer();
+        player.coins = Math.max(0, player.coins - 10);
+      } else {
+        player.vx *= -0.65;
+        player.vy *= -0.65;
+      }
+    }
+  }
+}
+
+
+      }
+    }
+    player.slowMul = inSlime ? 0.62 : 1;
+
+    // update pellets (ejected mass / bait)
+    for (let i=pellets.length-1;i>=0;i--){
+      const p = pellets[i];
+      p.ttl -= dt;
+      if (p.ttl <= 0) { pellets.splice(i,1); continue; }
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      // if player touches -> take back as coin
+      const rr = player.r + p.r + 4;
+      if (dist2(player.x, player.y, p.x, p.y) < rr*rr) {
+        pellets.splice(i,1);
+        player.coins += 1;
+        continue;
+      }
+    }
+
+  }
+
+  function damagePlayer() {
+    if (player.invulnTime > 0) return;
+    player.hp--;
+    player.invulnTime = 1.15; // i-frames (so mines don't insta-delete you)
+    // knockback opposite velocity
+    player.vx *= -0.55;
+    player.vy *= -0.55;
+    // also lose some tail
+    loseTailSegments(260);
+    kickShake(10, 0.18);
+    spawnBurst(player.x, player.y, 350, 18, 260);
+
+    if (player.hp <= 0) {
+      state = 'DEAD';
+      const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
+      if (timeSurv > bestNow) {
+        localStorage.setItem(BEST_KEY, String(timeSurv));
+        elBest.textContent = timeSurv.toFixed(1) + 's';
+      }
+      overlay.style.display = 'flex';
+      overlay.querySelector('h2').textContent = 'Поражение 😵';
+      overlay.querySelectorAll('p')[0].innerHTML = `Время: <b>${timeSurv.toFixed(1)}s</b> • Монеты: <b>${player.coins}</b> • Уровень: <b>${level}</b>`;
+      overlay.querySelectorAll('p')[1].innerHTML = `Совет: кормись на мелких, избегай крупных. В темноте встречаются "хищники" и "вирусы". SPACE — рывок.`;
+      overlay.querySelectorAll('p')[2].innerHTML = `Нажми <b>Старт</b>, чтобы сразу начать заново.`;
+      overlay.querySelector('#start').textContent = 'Старт';
+    }
+  }
+
+  // ==========================
+  // Rendering
+  // ==========================
+  function pathWobblyCircle(cx, cy, r, amp, t) {
+  // Creates a slightly irregular circle path (less "perfect" boundary)
+  const N = 64;
+  ctx.beginPath();
+  for (let i=0; i<=N; i++) {
+    const a = (i / N) * TAU;
+    const n = Math.sin(a*3 + t*0.9) * 0.55 + Math.sin(a*9 - t*1.2) * 0.35 + Math.sin(a*15 + t*0.6) * 0.10;
+    const rr = r * (1 + amp * n);
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+
+function pathWobblyConeMask(cx, cy, ang, len, half, amp, t) {
+  // wobbly cone/sector path for the flashlight mask (uses maskCtx)
+  const Nedge = 22;
+  const Narc = 26;
+
+  const aL = ang - half;
+  const aR = ang + half;
+
+  maskCtx.beginPath();
+  maskCtx.moveTo(cx, cy);
+
+  // left edge (slight lateral jitter)
+  for (let i=1; i<=Nedge; i++) {
+    const u = i / Nedge;
+    const d = u * len;
+    const jit = Math.sin(u*9 + t*1.3) * amp * len * 0.35 * (u*u);
+    const perp = aL + Math.PI/2;
+    const x = cx + Math.cos(aL) * d + Math.cos(perp) * jit;
+    const y = cy + Math.sin(aL) * d + Math.sin(perp) * jit;
+    maskCtx.lineTo(x, y);
+  }
+
+  // outer boundary (wobbly arc)
+  for (let i=0; i<=Narc; i++) {
+    const u = i / Narc;
+    const a = aL + (aR - aL) * u;
+    const n = Math.sin(a*7 + t*0.9) * 0.55 + Math.sin(a*13 - t*1.1) * 0.25 + Math.sin(a*21 + t*0.7) * 0.10;
+    const rr = len * (1 + amp * 0.55 * n);
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    maskCtx.lineTo(x, y);
+  }
+
+  // right edge back (slight lateral jitter)
+  for (let i=Nedge; i>=1; i--) {
+    const u = i / Nedge;
+    const d = u * len;
+    const jit = Math.sin(u*8 + t*1.25 + 2.7) * amp * len * 0.35 * (u*u);
+    const perp = aR - Math.PI/2;
+    const x = cx + Math.cos(aR) * d + Math.cos(perp) * jit;
+    const y = cy + Math.sin(aR) * d + Math.sin(perp) * jit;
+    maskCtx.lineTo(x, y);
+  }
+
+  maskCtx.closePath();
+}
+
+  function render() {
+  // reset canvas state
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0,0,W,H);
+
+  // screen position of player
+  const px = W/2 + (player.x - cam.x);
+  const py = H/2 + (player.y - cam.y);
+
+  // update biome for visuals
+  currentBiome = biomeOf(Math.floor(player.x / CHUNK), Math.floor(player.y / CHUNK));
+
+  // mouse in WORLD coords
+  const tx = cam.x + (mouseX - W/2);
+  const ty = cam.y + (mouseY - H/2);
+
+  let dx = tx - player.x;
+  let dy = ty - player.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  dx /= dist; dy /= dist;
+
+  const ang = Math.atan2(dy, dx);
+
+  // base visibility (also used as flashlight length)
+  const base = Math.min(W, H) * 0.36;
+  const shrink = clamp(level * 22, 0, base * 0.70);
+  const sizeBoost = clamp((player.r - player.baseR) * 18, 0, base * 0.85);
+  const torchBoost = (player.torchTime > 0) ? base * 1.40 : 0;
+  const vis = clamp(base - shrink + sizeBoost + torchBoost, 240 * DPR, 1200 * DPR);
+
+  const sizeRatioR = player.r / player.baseR;
+  const mineScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.45, 1.0);
+  const trapScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.55, 1.0);
+
+  // flashlight parameters (cone)
+  const coneLen = vis * 1.05;                 // length of the beam
+  const coneHalf = 0.38;                      // half-angle (radians) ~ 22°
+  const endR = clamp(coneLen * 0.18, 90*DPR, 190*DPR); // rounded head
+  const nearR = clamp(85*DPR + player.r*1.2, 80*DPR, 150*DPR); // small local light
+  const wobbleAmp = 0.020;                    // edge irregularity
+  const featherPx = 26 * DPR;                 // blur for soft edge (vignette)
+  const t = performance.now() * 0.001;
+
+  // === 1) Draw the WORLD full-screen (it will be masked) ===
+  drawBackground();
+  drawStars();
+
+  // world -> screen transform
+  const sh = (shakeT > 0) ? (Math.sin(performance.now()*0.06) * shakeA * DPR) : 0;
+  const sh2 = (shakeT > 0) ? (Math.cos(performance.now()*0.05) * shakeA * DPR) : 0;
+  const sx = (x)=> (x - cam.x) + W/2 + sh;
+  const sy = (y)=> (y - cam.y) + H/2 + sh2;
+
+  // Determine chunk range based on camera & view
+  const pad = VIEW_PAD;
+  const minX = cam.x - (W/2 + pad);
+  const maxX = cam.x + (W/2 + pad);
+  const minY = cam.y - (H/2 + pad);
+  const maxY = cam.y + (H/2 + pad);
+
+  const cx0 = Math.floor(minX / CHUNK);
+  const cx1 = Math.floor(maxX / CHUNK);
+  const cy0 = Math.floor(minY / CHUNK);
+  const cy1 = Math.floor(maxY / CHUNK);
+
+  // draw coins/mines
+  for (let cy=cy0; cy<=cy1; cy++) {
+    for (let cx=cx0; cx<=cx1; cx++) {
+      const ch = getChunk(cx, cy, level);
+
+      for (const c of ch.coins) {
+        if (collected.has(c.id)) continue;
+        const x = sx(c.x), y = sy(c.y);
+        if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
+        drawCoin(x,y,c.r);
+      }
+
+      if (ch.torches) {
+        for (const tt of ch.torches) {
+          if (collected.has(tt.id)) continue;
+          const x = sx(tt.x), y = sy(tt.y);
+          if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
+          drawTorch(x,y,tt.r);
+        }
+      }
+
+      for (const m of ch.mines) {
+        const mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
+        const my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
+        const x = sx(mx), y = sy(my);
+        if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
+        drawMine(x,y,m.r * mineScaleR);
+      }
+// agar-style cells
+if (ch.cells) {
+  for (const cc of ch.cells) {
+    if (collected.has(cc.id)) continue;
+    const x = sx(cc.x), y = sy(cc.y);
+    if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
+    const eatF = 1.12;
+    const rel = (player.r > cc.r*eatF) ? 1 : (cc.r > player.r*eatF ? -1 : 0);
+    drawCell(x,y,cc.r,cc.hue,cc.kind,cc.skin,rel);
+  }
+}
+// virus
+if (ch.viruses) {
+  for (const v of ch.viruses) {
+    if (collected.has(v.id)) continue;
+    const x = sx(v.x), y = sy(v.y);
+    if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
+    drawVirus(x,y,v.r*trapScaleR,v.phase);
+  }
+}
+// mimic coin (trap)
+if (ch.mimics) {
+  for (const mm of ch.mimics) {
+    if (collected.has(mm.id)) continue;
+    const x = sx(mm.x), y = sy(mm.y);
+    if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
+    drawMimic(x,y,mm.r*trapScaleR,mm.phase);
+  }
+}
+// hunters / predators
+if (ch.hunters) {
+  for (const h of ch.hunters) {
+    if (collected.has(h.id)) continue;
+    const x = sx(h.x), y = sy(h.y);
+    if (x<-180 || y<-180 || x>W+180 || y>H+180) continue;
+    const eatF = 1.12;
+    const rel = (player.r > h.r*eatF) ? 1 : (h.r > player.r*eatF ? -1 : 0);
+    drawHunter(x,y,h.r,h.kind,h.hue,h.skin,h.charge>0?1:0,rel);
+  }
+}
+    }
+  }
+
+  // Swarms (rois) + Boss
+  drawSwarms(sx, sy);
+  drawBoss(sx, sy);
+
+  // FX particles
+  drawFX(sx, sy);
+
+  // pellets (ejected mass)
+  for (const p of pellets) {
+    const x = sx(p.x), y = sy(p.y);
+    if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
+    drawPellet(x,y,p.r);
+  }
+
+  // player (world)
+  drawPlayer(sx(player.x), sy(player.y), player.r);
+
+  if (state === 'RUN') drawTarget(mouseX, mouseY);
+
+  // adrenaline overlay (will be masked too)
+  if (state === 'RUN' && player.nearMiss > 0.1) {
+    const a = clamp(player.nearMiss, 0, 1) * 0.14;
+    ctx.fillStyle = `rgba(255,60,120,${a})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // === 2) Build flashlight MASK (cone + rounded head + small local circle) ===
+  maskCtx.setTransform(1,0,0,1,0,0);
+  maskCtx.clearRect(0,0,W,H);
+  maskCtx.globalAlpha = 1;
+  maskCtx.globalCompositeOperation = 'source-over';
+
+  // Hard core
+  maskCtx.filter = 'none';
+  maskCtx.fillStyle = 'rgba(255,255,255,1)';
+  pathWobblyConeMask(px, py, ang, coneLen, coneHalf, wobbleAmp, t);
+  maskCtx.fill();
+
+  // Rounded head (bigger reveal at the end)
+  const ex = px + Math.cos(ang) * coneLen;
+  const ey = py + Math.sin(ang) * coneLen;
+  maskCtx.beginPath();
+  maskCtx.arc(ex, ey, endR, 0, TAU);
+  maskCtx.fill();
+
+  // Small local light around player (so you always see yourself)
+  maskCtx.beginPath();
+  maskCtx.arc(px, py, nearR, 0, TAU);
+  maskCtx.fill();
+
+  // Soft edge / vignette via blur pass
+  maskCtx.filter = `blur(${featherPx}px)`;
+  maskCtx.globalAlpha = 0.92;
+  pathWobblyConeMask(px, py, ang, coneLen, coneHalf, wobbleAmp, t);
+  maskCtx.fill();
+  maskCtx.beginPath();
+  maskCtx.arc(ex, ey, endR, 0, TAU);
+  maskCtx.fill();
+  maskCtx.beginPath();
+  maskCtx.arc(px, py, nearR, 0, TAU);
+  maskCtx.fill();
+  maskCtx.filter = 'none';
+  maskCtx.globalAlpha = 1;
+
+  // === 3) Apply MASK to main canvas ===
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(maskCanvas, 0, 0);
+
+  // Fill outside with absolute black (mine)
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.fillStyle = 'rgba(0,0,0,1)';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.globalCompositeOperation = 'source-over';
+
+  // Tail overlay (always visible)
+  drawTail(sx, sy);
+
+  // Player outline on top (always readable)
+  drawPlayerOutline(px, py, player.r);
+}
+
+  function drawBackground() {
+  const b = BIOMES[currentBiome] || BIOMES.void;
+
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, b.bg[0]);
+  g.addColorStop(0.6, b.bg[1]);
+  g.addColorStop(1, b.bg[2]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  // subtle biome clouds (only visible in flashlight)
+  ctx.save();
+  ctx.globalAlpha = 1;
+  const t = performance.now()*0.00006;
+  const cx1 = (Math.sin(t*2.1)*0.5+0.5) * W;
+  const cy1 = (Math.cos(t*1.7)*0.5+0.5) * H;
+  const r1 = Math.max(W,H)*0.55;
+  const cloud = ctx.createRadialGradient(cx1,cy1, 10, cx1,cy1, r1);
+  cloud.addColorStop(0, b.tint);
+  cloud.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = cloud;
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+}
+
+function drawStars() {
+    const b = BIOMES[currentBiome] || BIOMES.void;
+	ctx.save();
+    // cheap pseudo stars based on camera (no arrays)
+    const density = 85;
+    const px = cam.x * 0.0012;
+    const py = cam.y * 0.0012;
+    ctx.globalAlpha = 0.55;
+    for (let i=0;i<density;i++){
+      const x = ((Math.sin(i*999 + px*4.2) * 0.5 + 0.5) * W);
+      const y = ((Math.cos(i*777 + py*3.8) * 0.5 + 0.5) * H);
+      const r = (i % 7 === 0) ? 2.0 : 1.2;
+      ctx.fillStyle = (i % 11 === 0) ? b.starB : b.starA;
+      ctx.beginPath(); ctx.arc(x,y,r*DPR,0,TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+	ctx.restore();
+  }
+
+  
+function drawPellet(x,y,r){
+  ctx.save();
+  const glow = ctx.createRadialGradient(x,y,1, x,y, r*6);
+  glow.addColorStop(0, 'rgba(180,255,220,0.70)');
+  glow.addColorStop(1, 'rgba(180,255,220,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,r*6,0,TAU); ctx.fill();
+
+  ctx.fillStyle = 'rgba(210,255,235,0.95)';
+  ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawCoin(x,y,r) {
+    // glow
+    ctx.save();
+    const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.6);
+    glow.addColorStop(0, 'rgba(255,225,120,0.55)');
+    glow.addColorStop(1, 'rgba(255,225,120,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x,y,r*3.6,0,TAU); ctx.fill();
+
+    // body
+    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+    g.addColorStop(0,'#FFE08A');
+    g.addColorStop(1,'#FFB300');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r*1.25,0,TAU); ctx.fill();
+
+    // inner ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath(); ctx.arc(x,y,r*0.82,0,TAU); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawTorch(x,y,r){
+    ctx.save();
+    const glow = ctx.createRadialGradient(x,y,1, x,y, r*5);
+    glow.addColorStop(0, 'rgba(170,255,200,0.55)');
+    glow.addColorStop(1, 'rgba(170,255,200,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x,y,r*5,0,TAU); ctx.fill();
+
+    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+    g.addColorStop(0,'#BFFFE2');
+    g.addColorStop(1,'#35FFB0');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r*1.15,0,TAU); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath(); ctx.arc(x,y,r*0.75,0,TAU); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMine(x,y,r) {
+    ctx.save();
+    // danger glow
+    const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.0);
+    glow.addColorStop(0, 'rgba(255,60,120,0.40)');
+    glow.addColorStop(1, 'rgba(255,60,120,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x,y,r*3,0,TAU); ctx.fill();
+
+    // body
+    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+    g.addColorStop(0,'#FF3C7A');
+    g.addColorStop(1,'#B10C3F');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+
+    // spikes
+    ctx.strokeStyle = 'rgba(255,170,200,0.8)';
+    ctx.lineWidth = 3*DPR;
+    for (let i=0;i<10;i++){
+      const a = (i/10)*TAU;
+      const x1 = x + Math.cos(a) * (r*0.92);
+      const y1 = y + Math.sin(a) * (r*0.92);
+      const x2 = x + Math.cos(a) * (r*1.18);
+      const y2 = y + Math.sin(a) * (r*1.18);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  
+function drawHunter(x,y,r,kind,hue,skin,isCharging,rel){
+  ctx.save();
+
+  // palette by kind
+  let h = hue|0;
+  if (kind === 'chaser') h = (h + 120) % 360;      // greenish
+  if (kind === 'charger') h = (h + 20) % 360;     // orange
+  if (kind === 'leech') h = (h + 280) % 360;      // purple
+  if (kind === 'lurker') h = (h + 350) % 360;     // dark red
+
+  const glowA = (kind === 'lurker') ? 0.10 : (isCharging ? 0.38 : 0.22);
+
+  // glow
+  const glow = ctx.createRadialGradient(x,y,1, x,y, r*4.6);
+  glow.addColorStop(0, `hsla(${h},100%,65%,${glowA})`);
+  glow.addColorStop(1, `hsla(${h},100%,60%,0)`);
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,r*4.6,0,TAU); ctx.fill();
+
+  // body gradient
+  const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+  g.addColorStop(0, `hsl(${h},100%,55%)`);
+  g.addColorStop(1, `hsl(${h},90%,28%)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+
+  // patterns
+  if (skin === 1) { // stripes
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 3*DPR;
+    for (let i=-2;i<=2;i++){
+      ctx.beginPath();
+      ctx.arc(x,y,r*(0.35 + i*0.08), 0, TAU);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (skin === 2) { // dots
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (let i=0;i<8;i++){
+      const a = (i/8)*TAU;
+      ctx.beginPath();
+      ctx.arc(x+Math.cos(a)*r*0.55, y+Math.sin(a)*r*0.55, r*0.10, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // kind-specific features
+  if (kind === 'charger') {
+    // spikes
+    ctx.strokeStyle = 'rgba(255,235,200,0.9)';
+    ctx.lineWidth = 3*DPR;
+    for (let i=0;i<10;i++){
+      const a = (i/10)*TAU;
+      const x1 = x + Math.cos(a) * (r*0.85);
+      const y1 = y + Math.sin(a) * (r*0.85);
+      const x2 = x + Math.cos(a) * (r*1.20);
+      const y2 = y + Math.sin(a) * (r*1.20);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    }
+  }
+  if (kind === 'leech') {
+    // ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath(); ctx.arc(x,y,r*0.72,0,TAU); ctx.stroke();
+  }
+
+  // eye
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.arc(x+r*0.24,y-r*0.14,r*0.20,0,TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath(); ctx.arc(x+r*0.20,y-r*0.18,r*0.09,0,TAU); ctx.fill();
+
+
+  // outline (readability)
+  let o = (kind === 'lurker') ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.22)';
+  if (rel === 1) o = 'rgba(90,255,170,0.70)';       // you can eat it
+  else if (rel === -1) o = 'rgba(255,90,120,0.70)'; // it can eat you
+  ctx.strokeStyle = o;
+  ctx.lineWidth = 3*DPR;
+  ctx.beginPath(); ctx.arc(x,y,r*1.03,0,TAU); ctx.stroke();
+
+  ctx.restore();
+}
+
+
+function drawSwarmDrone(x,y,r,hue,kind){
+  ctx.save();
+  const glowR = (kind === 'piranha') ? r*4.8 : r*4.0;
+  const glow = ctx.createRadialGradient(x,y,1, x,y, glowR);
+  const c0 = (kind === 'piranha') ? 'rgba(255,70,120,0.55)' : 'rgba(120,220,255,0.45)';
+  glow.addColorStop(0, c0);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,glowR,0,TAU); ctx.fill();
+
+  // body
+  ctx.fillStyle = `hsl(${hue}, 85%, ${kind==='piranha'?'55%':'62%'})`;
+  ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 2*DPR;
+  ctx.beginPath(); ctx.arc(x,y,r*1.02,0,TAU); ctx.stroke();
+  ctx.restore();
+}
+
+function drawSwarms(sx, sy){
+  for (const s of swarms){
+    const x = sx(s.x), y = sy(s.y);
+    if (x<-200 || y<-200 || x>W+200 || y>H+200) continue;
+    drawSwarmDrone(x,y,s.r,s.hue,s.kind);
+  }
+}
+
+function drawBoss(sx, sy){
+  if (!boss.active) return;
+  const x = sx(boss.x), y = sy(boss.y);
+  if (x<-900 || y<-900 || x>W+900 || y>H+900) return;
+
+  ctx.save();
+  // ominous halo
+  const glow = ctx.createRadialGradient(x,y, 5, x,y, boss.r*2.6);
+  glow.addColorStop(0, 'rgba(255,40,40,0.22)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,boss.r*2.6,0,TAU); ctx.fill();
+
+  // body
+  const g = ctx.createLinearGradient(x-boss.r,y-boss.r,x+boss.r,y+boss.r);
+  g.addColorStop(0,'#2A0000');
+  g.addColorStop(1,'#130000');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,boss.r,0,TAU); ctx.fill();
+
+  // spikes
+  ctx.strokeStyle = 'rgba(255,120,120,0.65)';
+  ctx.lineWidth = 3*DPR;
+  const n = 22;
+  for (let i=0;i<n;i++){
+    const a = (i/n)*TAU + boss.phase*0.2;
+    const x1 = x + Math.cos(a) * (boss.r*0.92);
+    const y1 = y + Math.sin(a) * (boss.r*0.92);
+    const x2 = x + Math.cos(a) * (boss.r*1.18);
+    const y2 = y + Math.sin(a) * (boss.r*1.18);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+
+  // inner eye
+  ctx.fillStyle = 'rgba(255,60,60,0.55)';
+  ctx.beginPath(); ctx.arc(x + boss.r*0.18, y - boss.r*0.12, boss.r*0.22, 0, TAU); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawCell(x,y,r,hue,kind,skin,rel){
+  ctx.save();
+  const h = hue|0;
+
+  // softer glow for neutral cells
+  const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.8);
+  glow.addColorStop(0, `hsla(${h},100%,70%,0.16)`);
+  glow.addColorStop(1, `hsla(${h},100%,60%,0)`);
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,r*3.8,0,TAU); ctx.fill();
+
+  // body
+  const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+  g.addColorStop(0, `hsl(${h},100%,62%)`);
+  g.addColorStop(1, `hsl(${h},90%,30%)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+
+  // little face for variety
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = 'rgba(0,0,0,0.9)';
+  ctx.beginPath(); ctx.arc(x-r*0.18,y-r*0.10,r*0.10,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+r*0.18,y-r*0.10,r*0.10,0,TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+
+
+  // outline (readability): green = edible, red = danger, white = neutral
+  let o = 'rgba(255,255,255,0.18)';
+  if (rel === 1) o = 'rgba(90,255,170,0.55)';
+  else if (rel === -1) o = 'rgba(255,90,120,0.55)';
+  ctx.strokeStyle = o;
+  ctx.lineWidth = 3*DPR;
+  ctx.beginPath(); ctx.arc(x,y,r*1.03,0,TAU); ctx.stroke();
+
+  // tiny icon
+  ctx.fillStyle = (rel === 1) ? 'rgba(90,255,170,0.75)' : (rel === -1 ? 'rgba(255,90,120,0.75)' : 'rgba(255,255,255,0.22)');
+  ctx.font = `${Math.max(10, r*0.55)}px system-ui`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const mark = (rel === 1) ? '+' : (rel === -1 ? '!' : '');
+  if (mark) ctx.fillText(mark, x, y + r*0.05);
+
+  // runners have a small "speed" tail mark
+  if (kind === 'runner'){
+    ctx.strokeStyle = `hsla(${h},100%,80%,0.35)`;
+    ctx.lineWidth = 4*DPR;
+    ctx.beginPath();
+    ctx.moveTo(x-r*0.9,y+r*0.2);
+    ctx.lineTo(x-r*1.35,y+r*0.35);
+    ctx.stroke();
+  }
+  // bullies have a crown mark
+  if (kind === 'bully'){
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 3*DPR;
+    ctx.beginPath();
+    ctx.moveTo(x-r*0.35, y-r*0.95);
+    ctx.lineTo(x, y-r*1.25);
+    ctx.lineTo(x+r*0.35, y-r*0.95);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+
+function drawSlime(x,y,r,phase){
+  ctx.save();
+  const wob = 1 + Math.sin(phase)*0.03;
+  const g = ctx.createRadialGradient(x,y, r*0.15, x,y, r*wob);
+  g.addColorStop(0, 'rgba(60,255,160,0.10)');
+  g.addColorStop(1, 'rgba(60,255,160,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r*wob,0,TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawVirus(x,y,r,phase){
+  ctx.save();
+  const glow = ctx.createRadialGradient(x,y,1, x,y, r*5.0);
+  glow.addColorStop(0, 'rgba(200,120,255,0.22)');
+  glow.addColorStop(1, 'rgba(200,120,255,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,r*5,0,TAU); ctx.fill();
+
+  const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+  g.addColorStop(0,'#C97BFF');
+  g.addColorStop(1,'#5A1DAA');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+
+  // spikes
+  ctx.strokeStyle = 'rgba(255,220,255,0.85)';
+  ctx.lineWidth = 3*DPR;
+  const n = 12;
+  for (let i=0;i<n;i++){
+    const a = phase + (i/n)*TAU;
+    const x1 = x + Math.cos(a) * (r*0.85);
+    const y1 = y + Math.sin(a) * (r*0.85);
+    const x2 = x + Math.cos(a) * (r*1.30);
+    const y2 = y + Math.sin(a) * (r*1.30);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 2*DPR;
+  ctx.beginPath(); ctx.arc(x,y,r*1.02,0,TAU); ctx.stroke();
+  ctx.restore();
+}
+
+function drawMimic(x,y,r,phase){
+  ctx.save();
+  // coin-ish glow
+  const glow = ctx.createRadialGradient(x,y,1, x,y, r*5.2);
+  glow.addColorStop(0, 'rgba(255,210,80,0.55)');
+  glow.addColorStop(1, 'rgba(255,210,80,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x,y,r*5.2,0,TAU); ctx.fill();
+
+  // body coin
+  const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+  g.addColorStop(0,'#FFE08A');
+  g.addColorStop(1,'#FFB300');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r*1.15,0,TAU); ctx.fill();
+
+  // red core (trap sign)
+  ctx.fillStyle = 'rgba(255,60,120,0.8)';
+  ctx.beginPath(); ctx.arc(x + Math.cos(phase)*r*0.15, y + Math.sin(phase)*r*0.15, r*0.45, 0, TAU); ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 2*DPR;
+  ctx.beginPath(); ctx.arc(x,y,r*0.78,0,TAU); ctx.stroke();
+  ctx.restore();
+}
+
+
+function drawPlayerOutline(x,y,r){
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.70)';
+  ctx.lineWidth = 3 * DPR;
+  ctx.beginPath();
+  ctx.arc(x,y,r*1.05,0,TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
+  function drawTail(sx, sy) {
+    if (tail.points.length < 2) return;
+
+    ctx.save();
+    // tail glow depends on coins
+    const a = clamp(0.45 + player.coins/260, 0.45, 0.85);
+
+    // draw polyline
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // glow stroke
+    ctx.strokeStyle = `rgba(90,180,255,${a*0.7})`;
+    ctx.lineWidth = (18 + player.r*0.25) * DPR;
+    ctx.beginPath();
+    for (let i=0;i<tail.points.length;i++){
+      const p = tail.points[i];
+      const x = sx(p.x), y = sy(p.y);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // core stroke
+    ctx.strokeStyle = `rgba(220,245,255,${a})`;
+    ctx.lineWidth = (2.5 + player.r*0.06) * DPR;
+    ctx.beginPath();
+    for (let i=0;i<tail.points.length;i++){
+      const p = tail.points[i];
+      const x = sx(p.x), y = sy(p.y);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawPlayer(x,y,r) {
+    ctx.save();
+    // shadow
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.ellipse(x, y + r*0.9, r*1.0, r*0.55, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // body gradient
+    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+    g.addColorStop(0,'#79C8FF');
+    g.addColorStop(1,'#3B60FF');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+
+    // highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.30)';
+    ctx.beginPath(); ctx.arc(x+r*0.28, y-r*0.28, r*0.42, 0, TAU); ctx.fill();
+
+    // hp ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath(); ctx.arc(x,y,r*1.05,0,TAU); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawTarget(x,y) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = 'rgba(200,225,255,0.5)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath();
+    ctx.arc(x,y,10*DPR,0,TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFog() {
+	  if (state !== 'RUN') return;
+
+	  const px = W/2 + (player.x - cam.x);
+	  const py = H/2 + (player.y - cam.y);
+
+	  // радиус окна
+	  const base = Math.min(W, H) * 0.36;
+	  const shrink = clamp(level * 22, 0, base * 0.70);
+	  const sizeBoost = clamp((player.r - player.baseR) * 18, 0, base * 0.85);
+	  const torchBoost = (player.torchTime > 0) ? base * 1.40 : 0;
+	  const vis = clamp(base - shrink + sizeBoost + torchBoost, 240 * DPR, 1200 * DPR);
+
+  const sizeRatioR = player.r / player.baseR;
+  const mineScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.45, 1.0);
+  const trapScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.55, 1.0);
+
+	  const feather = 70 * DPR; // толщина мягкого края СНАРУЖИ окна
+
+	  ctx.save();
+
+	  // 1) ВСЁ в чёрное (абсолютная шахта)
+	  ctx.globalAlpha = 1;
+	  ctx.globalCompositeOperation = 'source-over';
+	  ctx.fillStyle = 'rgba(0,0,0,1)';
+	  ctx.fillRect(0, 0, W, H);
+
+	  // 2) ВЫРЕЗАЕМ ОКНО (внутри 100% прозрачно)
+	  ctx.globalCompositeOperation = 'destination-out';
+	  ctx.fillStyle = 'rgba(0,0,0,1)'; // alpha=1 => вырезать
+	  ctx.beginPath();
+	  ctx.arc(px, py, vis, 0, TAU);
+	  ctx.fill();
+
+	  // 3) МЯГКИЙ КРАЙ ТОЛЬКО СНАРУЖИ окна (внутри не трогаем)
+	  ctx.globalCompositeOperation = 'source-over';
+	  const edge = ctx.createRadialGradient(px, py, vis, px, py, vis + feather);
+	  edge.addColorStop(0, 'rgba(0,0,0,0)'); // внутри окна = 0 (ничего не затемняем)
+	  edge.addColorStop(1, 'rgba(0,0,0,1)'); // снаружи = чёрное
+	  ctx.fillStyle = edge;
+	  ctx.beginPath();
+	  ctx.arc(px, py, vis + feather, 0, TAU);
+	  ctx.fill();
+
+	  ctx.restore();
+	}
+
+  function drawVignette() {
+    ctx.save();
+    const g = ctx.createRadialGradient(W/2,H/2, Math.min(W,H)*0.25, W/2,H/2, Math.max(W,H)*0.62);
+    g.addColorStop(0,'rgba(0,0,0,0)');
+    g.addColorStop(1,'rgba(0,0,0,0.55)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
+
+  // ==========================
+  // Boot
+  // ==========================
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

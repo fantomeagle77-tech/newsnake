@@ -1,0 +1,7 @@
+name = "newsnake"
+compatibility_date = "2026-03-09"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "newsnake_db"
+database_id = "42fa4e6e-7aa0-4ff0-80a4-59c9e4d9a2c2"
