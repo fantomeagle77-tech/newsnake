@@ -1101,6 +1101,7 @@
   // ==========================
   // Main loop
   // ==========================
+  let prevLevel = 1;
   let lastTs = performance.now();
 
   function loop(ts) {
@@ -1115,13 +1116,13 @@
 	  player.torchTime = Math.max(0, player.torchTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
 
-	  let prevLevel = 1;
+	 
 		
       // Level scaling: every ~12s
       level = 1 + Math.floor(timeSurv / 12);
 	  if (level !== prevLevel) {
 	    prevLevel = level;
-	    AudioFX.levelUp();
+	    window.AudioFX?.levelUp?.();
 	  }
 	  if (player.coins >= 30) level = Math.max(level, 6);
 	  if (player.coins >= 60) level = Math.max(level, 10);
