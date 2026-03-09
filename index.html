@@ -75,6 +75,8 @@
     .row .btn { pointer-events:auto; }
     a { color:#9EC2FF; }
   </style>
+  <script defer src="/js/audio.js"></script>
+  <script defer src="/js/online_ui.js"></script>
 </head>
 <body>
   <div id="wrap">
@@ -89,6 +91,9 @@
     <div class="pill"><span>❤️</span> <b id="hp">3</b></div>
     <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
     <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
+	<button class="btn" id="btnSound" title="Звук">🔊</button>
+	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
+	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
     <div class="spacer"></div>
     <button class="btn" id="pause">Пауза</button>
     <button class="btn" id="restart">Заново</button>
@@ -745,6 +750,7 @@
       state = 'RUN';
       overlay.style.display = 'none';
     }
+	AudioFX.click();
   }
   function resetGame() {
     player.x = 0; player.y = 0;
@@ -800,6 +806,25 @@
     resetGame();
   });
 
+  AudioFX.autoUnlock();
+
+	document.getElementById("btnSound").onclick = async () => {
+	  await AudioFX.unlock();
+	  const on = AudioFX.toggleEnabled();
+	  document.getElementById("btnSound").textContent = on ? "🔊" : "🔈";
+	};
+	
+	document.getElementById("btnMusic").onclick = async () => {
+	  const on = await AudioFX.toggleMusic();
+	  document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
+	};
+	
+	document.getElementById("btnTop").onclick = async () => {
+	  await AudioFX.unlock();
+	  AudioFX.click();
+	  OnlineUI.togglePanel();
+	};
+	
   function updateHUD() {
     elT.textContent = timeSurv.toFixed(1) + 's';
     elCoins.textContent = player.coins;
@@ -1090,8 +1115,14 @@
 	  player.torchTime = Math.max(0, player.torchTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
 
+	  let prevLevel = 1;
+		
       // Level scaling: every ~12s
       level = 1 + Math.floor(timeSurv / 12);
+	  if (level !== prevLevel) {
+	    prevLevel = level;
+	    AudioFX.levelUp();
+	  }
 	  if (player.coins >= 30) level = Math.max(level, 6);
 	  if (player.coins >= 60) level = Math.max(level, 10);
 	  if (player.coins >= 90) level = Math.max(level, 14);
@@ -1239,6 +1270,7 @@
           if (dist2(player.x, player.y, c.x, c.y) < rr*rr) {
             collected.add(c.id);
             player.coins++;
+			AudioFX.coin();
 			player.score += 10 * Math.max(1, player.combo);
 			player.combo++;
 			
@@ -1255,6 +1287,7 @@
 			if (dist2(player.x, player.y, t.x, t.y) < rr*rr) {
 			  collected.add(t.id);
 			  player.torchTime = 7.0; // секунд полной видимости
+			  AudioFX.power();
 			}
 		  }
 		}
@@ -1584,6 +1617,7 @@ if (ch.hunters) {
   }
 
   function damagePlayer() {
+	AudioFX.hit();
     if (player.invulnTime > 0) return;
     player.hp--;
     player.invulnTime = 1.15; // i-frames (so mines don't insta-delete you)
@@ -1597,6 +1631,15 @@ if (ch.hunters) {
 
     if (player.hp <= 0) {
       state = 'DEAD';
+	  AudioFX.dead();
+
+		// отправка результата в онлайн
+		OnlineUI.submit({
+		  score: (player.score ?? player.coins ?? 0),
+		  time_ms: Math.floor(timeSurv * 1000),
+		  coins: player.coins ?? 0,
+		  ghost: "[]"
+		}).then(() => OnlineUI.refreshTop());
       // submit score + ghost to online leaderboard
       onlineSubmitResult();
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
