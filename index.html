@@ -1601,11 +1601,6 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
         mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
         my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
       }
-
-        } else if (m.seekCd <= 0) {
-          m.seekT = 1.2;
-          m.seekCd = 3.0 + Math.random()*2.0;
-        }
       }
 
           // Near miss bonus (adrenaline)
