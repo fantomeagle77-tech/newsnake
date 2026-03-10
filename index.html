@@ -102,8 +102,14 @@
   <div class="hint">
     <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
     <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим.  🟡 корм/монеты  🔴 мины  🟣 вирус  🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)
-  <div id="onlinePanel" style="
-    position:fixed; right:16px; top:86px; z-index:9999;
+  
+</div>
+  </div>
+
+
+
+<div id="onlinePanel" style="
+    display:none; position:fixed; right:16px; top:86px; z-index:9999;
     width:280px; padding:12px;
     border-radius:16px; background:rgba(10, 14, 28, .62);
     border:1px solid rgba(90, 140, 255, .15);
@@ -135,8 +141,6 @@
     <div style="margin-top:10px; font-size:11px; opacity:.65;">
       Отправка результата — автоматически при поражении.
     </div>
-  </div>
-</div>
   </div>
 
   <div class="centerMsg" id="overlay">
@@ -832,6 +836,7 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   // Player / Game state
   // ==========================
   let state = 'MENU'; // MENU | RUN | PAUSE | DEAD
+  let inSlime = false; // sticky-zone flag (global for stepWorld)
 
   const player = {
     x: 0, y: 0,
@@ -1476,8 +1481,7 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     player.comboTimer = Math.max(0, player.comboTimer - dt);
 	if (player.comboTimer === 0) player.combo = 0;
 	player.nearMiss = Math.max(0, player.nearMiss - dt * 1.1);
-    let inSlime = false;
-
+    inSlime = false;
     const sizeRatio = player.r / player.baseR;
     const mineScale = clamp(1 / Math.sqrt(sizeRatio), 0.45, 1.0); // mines get smaller as you grow
     const trapScale = clamp(1 / Math.sqrt(sizeRatio), 0.55, 1.0); // traps/viruses shrink too
@@ -2020,9 +2024,6 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   // shift start a bit forward so it doesn't look like a bubble
   const sx = px + dx * (startR * 0.6);
   const sy = py + dy * (startR * 0.6);
-
-  const ex = px + dx * len;
-  const ey = py + dy * len;
 
   // left/right edges
   const ax = sx + lx * startR, ay = sy + ly * startR;
