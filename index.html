@@ -1908,7 +1908,6 @@ if (ch.hunters) {
     tryExtract();
     maybeSpawnPortal();
 
-  }
 
   function damagePlayer() {
 	AudioFX.hit();
@@ -2237,14 +2236,20 @@ if (ch.hunters) {
   maskCtx.fill();
 
   // aura feather
+  // aura feather (soft local visibility)
+  maskCtx.save();
+  maskCtx.globalAlpha = 0.70;
+  maskCtx.filter = `blur(${Math.max(18*DPR, featherPx*1.1)}px)`;
   maskCtx.beginPath();
   maskCtx.arc(px, py, auraR, 0, TAU);
   maskCtx.fill();
-
-  // aura core
+  // aura core (slightly smaller, clearer)
+  maskCtx.globalAlpha = 0.28;
+  maskCtx.filter = 'none';
   maskCtx.beginPath();
-  maskCtx.arc(px, py, auraR, 0, TAU);
+  maskCtx.arc(px, py, auraR * 0.72, 0, TAU);
   maskCtx.fill();
+  maskCtx.restore();
 
   // soft edge (vignette)
   maskCtx.filter = `blur(${featherPx}px)`;
@@ -2954,7 +2959,6 @@ function drawPlayerOutline(x,y,r){
 
   resetGame();
   requestAnimationFrame(loop);
-})();
-</script>
+})();</script>
 </body>
 </html>
