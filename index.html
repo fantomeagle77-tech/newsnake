@@ -613,7 +613,7 @@
 
   // Entities per chunk baseline (scales with level)
   function coinsPerChunk(level){ return Math.floor(7 + level * 0.8); }
-  function minesPerChunk(level){ return Math.floor(4 + level * 0.9); }
+  function minesPerChunk(level){ return Math.min(16, Math.floor(4 + level * 0.55)); }
 
   // ==========================
   // Input (mouse)
@@ -725,8 +725,8 @@
       const r = 22 + rnd()*10;
       const phase = rnd()*TAU;
       const drift = 0.25 + rnd()*0.85;
-      const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
-      mines.push({x,y,r,phase,drift,kind,seekCd:rnd()*2,seekT:0});
+      const kind = (level >= 10 && biome === 'lava' && rnd() < 0.10) ? 'seeker' : 'wobble';
+      mines.push({x,y,r,phase,drift,kind,seekCd:rnd()*2,seekWarn:0,seekT:0,lockx:0,locky:0});
     }
 
     // torch pickup (reveals area)
@@ -849,7 +849,7 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     invulnTime: 0,
     slowMul: 1,
     ejectCd: 0,
-    
+    ,
     relics: [],
     mods: { beam:0, aura:0, magnet:0, echo:0, antiSlow:0 },
     echoCd: 0,
@@ -1050,7 +1050,7 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   document.getElementById("btnTop").onclick = async () => {
 	  await AudioFX.unlock();
 	  AudioFX.click();
-	  OnlineUI.togglePanel();
+	  toggleTopPanel();
 	};
 	
   function updateHUD() {
@@ -1550,19 +1550,59 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
           m.phase += dt * (0.6 + level*0.02) * m.drift;
           let mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
 		  let my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
-      // seeker mines: редкие, с рывками, но НЕ 'невозможно убежать'
+      // seeker mines: редкие, с телеграфом и коротким рывком (должно быть убегаемо)
       if (m.kind === 'seeker' && level >= 10) {
         m.seekCd = (m.seekCd ?? 0) - dt;
-        if (m.seekT > 0) {
-          m.seekT -= dt;
-          const hx = player.x - m.x;
-          const hy = player.y - m.y;
-          const hd = Math.hypot(hx, hy) || 1;
-          if (hd < 520) {
-            const hunt = clamp(18 + (level-10)*0.8, 18, 32);
-            m.x += (hx/hd) * hunt * dt;
-            m.y += (hy/hd) * hunt * dt;
+
+        // distance to player (from mine center, not wobble)
+        const hx0 = player.x - m.x;
+        const hy0 = player.y - m.y;
+        const hd0 = Math.hypot(hx0, hy0) || 1;
+
+        // telegraph phase: flashes but does not move
+        if ((m.seekWarn ?? 0) > 0) {
+          m.seekWarn -= dt;
+          if (m.seekWarn <= 0) {
+            // lock direction at start of burst
+            m.lockx = hx0 / hd0;
+            m.locky = hy0 / hd0;
+            m.seekT = 0.75; // burst time
           }
+        }
+        // burst phase: small homing along locked dir, then cooldown
+        else if ((m.seekT ?? 0) > 0) {
+          m.seekT -= dt;
+
+          // burst speed (capped)
+          const hunt = clamp(26 + (level-10)*0.55, 26, 40);
+
+          // move only if player still reasonably near
+          if (hd0 < 780) {
+            const lx = (m.lockx || (hx0/hd0));
+            const ly = (m.locky || (hy0/hd0));
+            m.x += lx * hunt * dt;
+            m.y += ly * hunt * dt;
+          }
+
+          if (m.seekT <= 0) {
+            m.seekCd = 2.8 + Math.random()*2.8; // cooldown after burst
+          }
+        }
+        // start new telegraph only if close enough
+        else if (m.seekCd <= 0 && hd0 < 640) {
+          m.seekWarn = 0.35;
+          m.seekCd = 9999; // will be set after burst ends
+        }
+        else if (m.seekCd <= 0) {
+          // if far away, check again soon (don't "insta burst" offscreen)
+          m.seekCd = 1.0 + Math.random()*1.0;
+        }
+
+        // IMPORTANT: recompute wobble position after any movement
+        mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
+        my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
+      }
+
         } else if (m.seekCd <= 0) {
           m.seekT = 1.2;
           m.seekCd = 3.0 + Math.random()*2.0;
@@ -2116,6 +2156,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
         drawMine(x,y,m.r * mineScaleR);
+        if (m.kind === 'seeker' && (m.seekWarn||0) > 0) { ctx.save(); ctx.strokeStyle='rgba(255,90,140,0.55)'; ctx.lineWidth=2*DPR; ctx.beginPath(); ctx.arc(x,y,(m.r*mineScaleR)+10*DPR,0,TAU); ctx.stroke(); ctx.restore(); }
       }
 // agar-style cells
 if (ch.cells) {
