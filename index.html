@@ -99,43 +99,46 @@
     <button class="btn" id="restart">Заново</button>
   </div>
 
-  <div class="hint">
-    <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
-    <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим.  🟡 корм/монеты  🔴 мины  🟣 вирус  🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)
-  <div id="onlinePanel" style="
-    position:fixed; right:16px; top:86px; z-index:9999;
-    width:280px; padding:12px;
-    border-radius:16px; background:rgba(10, 14, 28, .62);
-    border:1px solid rgba(90, 140, 255, .15);
-    color:#EAF1FF; backdrop-filter: blur(12px);
-    box-shadow: 0 20px 70px rgba(0,0,0,.45);
-    pointer-events:auto;
-  ">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-      <div style="font-weight:800;">🌐 TOP дня</div>
-      <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
+    <div class="hint">
+      <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
+      <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
     </div>
 
-    <div style="margin-top:10px; display:flex; gap:8px;">
-      <input id="onlineName" maxlength="18" placeholder="Ник" style="
-        flex:1; padding:8px 10px; border-radius:12px;
-        border:1px solid rgba(255,255,255,0.14);
-        background:rgba(0,0,0,0.25); color:#fff; outline:none;
-      "/>
-      <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
-      <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
-    </div>
+    <div id="onlinePanel" style="
+      position:fixed; right:16px; top:86px; z-index:9999;
+      width:280px; padding:12px;
+      border-radius:16px; background:rgba(10, 14, 28, .62);
+      border:1px solid rgba(90, 140, 255, .15);
+      color:#EAF1FF; backdrop-filter: blur(12px);
+      box-shadow: 0 20px 70px rgba(0,0,0,.45);
+      pointer-events:auto;
+      display:none;
+    ">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <div style="font-weight:800;">🌐 TOP дня</div>
+        <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
+      </div>
 
-    <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
-      Призрак дня: загрузка…
-    </div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <input id="onlineName" maxlength="18" placeholder="Ник" style="
+          flex:1; padding:8px 10px; border-radius:12px;
+          border:1px solid rgba(255,255,255,0.14);
+          background:rgba(0,0,0,0.25); color:#fff; outline:none;
+        "/>
+        <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
+        <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
+      </div>
 
-    <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+      <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
+        Призрак дня: загрузка…
+      </div>
 
-    <div style="margin-top:10px; font-size:11px; opacity:.65;">
-      Отправка результата — автоматически при поражении.
+      <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+
+      <div style="margin-top:10px; font-size:11px; opacity:.65;">
+        Отправка результата — автоматически при поражении.
+      </div>
     </div>
-  </div>
 </div>
   </div>
 
@@ -355,6 +358,8 @@
   const elCoins = document.getElementById('coins');
   const elMass = document.getElementById('mass');
   const elScore = document.getElementById('score');
+  const elRelics = document.getElementById('relics');
+  const elExtract = document.getElementById('extract');
   const elHP = document.getElementById('hp');
   const elLv = document.getElementById('lv');
   const elBest = document.getElementById('best');
@@ -462,6 +467,47 @@
     lastRefreshAt: 0,
   };
 
+  const LOCAL_TOP_KEY = `voidrun_local_top_${SEED}_${MODE}`;
+
+  function localLoadTop() {
+    try {
+      const rows = JSON.parse(localStorage.getItem(LOCAL_TOP_KEY) || '[]');
+      return Array.isArray(rows) ? rows : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function localSaveTop(rows) {
+    try {
+      localStorage.setItem(LOCAL_TOP_KEY, JSON.stringify(rows.slice(0, 10)));
+    } catch (e) {}
+  }
+
+  function localSubmitTopRow() {
+    const rows = localLoadTop();
+    rows.push({
+      name: ONLINE.name || 'anon',
+      score: (player.score | 0),
+      relics: player.relics.length,
+      extracted: player.extracted ? 1 : 0,
+      time_ms: Math.floor(timeSurv * 1000),
+      coins: (player.coins | 0),
+      ghost: JSON.stringify(ONLINE.rec || []),
+    });
+
+    rows.sort((a, b) => {
+      if ((b.extracted|0) !== (a.extracted|0)) return (b.extracted|0) - (a.extracted|0);
+      if ((b.relics|0) !== (a.relics|0)) return (b.relics|0) - (a.relics|0);
+      if ((b.score|0) !== (a.score|0)) return (b.score|0) - (a.score|0);
+      return (b.time_ms|0) - (a.time_ms|0);
+    });
+
+    localSaveTop(rows);
+    ONLINE.top = rows.slice(0, 10);
+    onlineRenderTop();
+  }
+	
   function onlineSetName(n) {
     n = String(n || '').trim().slice(0,18);
     if (!n) return;
@@ -472,28 +518,36 @@
   function onlineInitUI() {
     if (onlineSeedEl) onlineSeedEl.textContent = `seed ${SEED}`;
     if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
+    if (onlinePanelEl) onlinePanelEl.style.display = 'none';
+    if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
 
-    if (onlineGhostEl) {
-      onlineGhostEl.checked = ONLINE.showGhost;
-      onlineGhostEl.onchange = () => {
-        ONLINE.showGhost = !!onlineGhostEl.checked;
-        localStorage.setItem('newsnake_showGhost', ONLINE.showGhost ? '1' : '0');
-      };
-    }
     if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
-    if (onlineNameEl) onlineNameEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') onlineSetName(onlineNameEl.value); });
+    if (onlineNameEl) {
+      onlineNameEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') onlineSetName(onlineNameEl.value);
+      });
+    }
     if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
   }
 
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
+
     for (const row of ONLINE.top) {
       const li = document.createElement('li');
       li.style.margin = '0 0 6px 0';
-      li.innerHTML = `<b>${row.name}</b> <span style="opacity:.75">— ${row.score}</span>`;
+
+      const parts = [];
+      if (row.extracted) parts.push('✅');
+      if (typeof row.relics === 'number') parts.push(`реликвии ${row.relics}/3`);
+      if (typeof row.score === 'number') parts.push(`score ${row.score}`);
+      if (typeof row.time_ms === 'number') parts.push(`${(row.time_ms / 1000).toFixed(1)}s`);
+
+      li.innerHTML = `<b>${row.name || 'anon'}</b> <span style="opacity:.75">— ${parts.join(' • ')}</span>`;
       onlineTopEl.appendChild(li);
     }
+
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -510,15 +564,25 @@
   }
 
   async function onlineRefresh() {
+    let topLoaded = false;
+
     try {
       const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=10`);
+      if (!topRes.ok) throw new Error('top failed');
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
+      topLoaded = true;
     } catch (e) {}
+
+    if (!topLoaded) {
+      ONLINE.top = localLoadTop();
+      onlineRenderTop();
+    }
 
     try {
       const gRes = await fetch(`/api/ghost?seed=${SEED}&mode=${MODE}`);
+      if (!gRes.ok) throw new Error('ghost failed');
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -528,11 +592,20 @@
         const parsed = JSON.parse(ONLINE.ghost.ghost);
         if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
       }
+
       onlineRenderGhostLabel();
     } catch (e) {
-      ONLINE.ghost = null;
+      ONLINE.ghost = ONLINE.top.length ? ONLINE.top[0] : null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
+
+      if (ONLINE.ghost && ONLINE.ghost.ghost) {
+        try {
+          const parsed = JSON.parse(ONLINE.ghost.ghost);
+          if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
+        } catch (err) {}
+      }
+
       onlineRenderGhostLabel();
     }
 
@@ -587,27 +660,34 @@
   }
 
   async function onlineSubmitResult(forceSubmit=false) {
+    if (MODE === 'expedition' && !forceSubmit && !player.extracted) return;
+
+    const payload = {
+      name: ONLINE.name || 'anon',
+      seed: SEED,
+      mode: MODE,
+      score: (player.score|0),
+      relics: player.relics.length,
+      extracted: player.extracted ? 1 : 0,
+      time_ms: Math.floor(timeSurv * 1000),
+      coins: (player.coins|0),
+      version: 'newsnake-pages-v1',
+      ghost: JSON.stringify(ONLINE.rec),
+    };
+
     try {
-      if (MODE === 'expedition' && !forceSubmit && !player.extracted) return;
-      const payload = {
-        name: ONLINE.name || 'anon',
-        seed: SEED,
-        mode: MODE,
-        score: (player.score|0),
-        relics: player.relics.length,
-        extracted: player.extracted ? 1 : 0,
-        time_ms: Math.floor(timeSurv * 1000),
-        coins: (player.coins|0),
-        version: 'newsnake-pages-v1',
-        ghost: JSON.stringify(ONLINE.rec),
-      };
-      await fetch('/api/submit', {
+      const res = await fetch('/api/submit', {
         method: 'POST',
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
       });
+
+      if (!res.ok) throw new Error('submit failed');
       await onlineRefresh();
-    } catch (e) {}
+    } catch (e) {
+      localSubmitTopRow();
+      onlineRenderGhostLabel();
+    }
   }
 
 
@@ -719,15 +799,21 @@
     }
 
     // mines
-    for (let i=0;i<nM;i++){
-      const x = baseX + rnd()*CHUNK;
-      const y = baseY + rnd()*CHUNK;
-      const r = 22 + rnd()*10;
-      const phase = rnd()*TAU;
-      const drift = 0.25 + rnd()*0.85;
-      const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
-      mines.push({x,y,r,phase,drift,kind,seekCd:rnd()*2,seekT:0});
-    }
+      for (let i=0;i<nM;i++){
+        const x = baseX + rnd()*CHUNK;
+        const y = baseY + rnd()*CHUNK;
+        const r = 22 + rnd()*10;
+        const phase = rnd()*TAU;
+        const drift = 0.25 + rnd()*0.85;
+        const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
+        mines.push({
+          x, y, r, phase, drift, kind,
+          seekCd: rnd()*2,
+          seekT: 0,
+          armed: 0.45 + rnd()*0.35,
+          tailCd: 0
+        });
+      }
 
     // torch pickup (reveals area)
     const torchP = (biome === 'nebula') ? 0.55 : (biome === 'lava' ? 0.28 : (biome === 'toxic' ? 0.30 : 0.38));
@@ -1048,10 +1134,13 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   }
 
   document.getElementById("btnTop").onclick = async () => {
-	  await AudioFX.unlock();
-	  AudioFX.click();
-	  toggleTopPanel();
-	};
+    await AudioFX.unlock();
+    AudioFX.click();
+    toggleTopPanel();
+    if (onlinePanelEl && onlinePanelEl.style.display === 'block') {
+      onlineRefresh();
+    }
+  };
 	
   function updateHUD() {
     elT.textContent = timeSurv.toFixed(1) + 's';
@@ -1060,6 +1149,20 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     elLv.textContent = level;
     elScore.textContent = player.score | 0;
     elMass.textContent = (player.r / player.baseR).toFixed(2) + 'x';
+
+    if (elRelics) elRelics.textContent = `${player.relics.length}/${RELIC_GOAL}`;
+
+    if (elExtract) {
+      if (player.extracted) {
+        elExtract.textContent = 'DONE';
+      } else if (portal) {
+        elExtract.textContent = 'GO';
+      } else if (player.relics.length >= RELIC_GOAL) {
+        elExtract.textContent = `${Math.max(0, Math.ceil(EXTRACT_MIN_SEC - timeSurv))}s`;
+      } else {
+        elExtract.textContent = '—';
+      }
+    }
   }
 
   
@@ -1523,14 +1626,16 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
 		if (ch.torches) {
 
       // relics
-      if (ch.relics) {
-        for (const rr of ch.relics) {
-          if (collected.has(rr.id)) continue;
-          const x = sx(rr.x), y = sy(rr.y);
-          if (x<-140 || y<-140 || x>W+140 || y>H+140) continue;
-          drawRelic(x,y,rr.r, rr.type);
+        if (ch.relics) {
+          for (const rr of ch.relics) {
+            if (collected.has(rr.id)) continue;
+            const grabR = player.r + rr.r + 10;
+            if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
+              collected.add(rr.id);
+              applyRelic(rr.type);
+            }
+          }
         }
-      }
 
 		  for (const t of ch.torches) {
 			if (collected.has(t.id)) continue;
@@ -1546,60 +1651,68 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
         // mines
         for (const m of ch.mines) {
           const mr = m.r * mineScale;
+
+          m.armed = Math.max(0, (m.armed ?? 0) - dt);
+          m.tailCd = Math.max(0, (m.tailCd ?? 0) - dt);
+
           // slight motion (orbiting wobble)
           m.phase += dt * (0.6 + level*0.02) * m.drift;
           let mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
-		  let my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
-      // seeker mines: редкие, с рывками, но НЕ 'невозможно убежать'
-      if (m.kind === 'seeker' && level >= 10) {
-        m.seekCd = (m.seekCd ?? 0) - dt;
-        if (m.seekT > 0) {
-          m.seekT -= dt;
-          const hx = player.x - m.x;
-          const hy = player.y - m.y;
-          const hd = Math.hypot(hx, hy) || 1;
-          if (hd < 520) {
-            const hunt = clamp(18 + (level-10)*0.8, 18, 32);
-            m.x += (hx/hd) * hunt * dt;
-            m.y += (hy/hd) * hunt * dt;
-          }
-        } else if (m.seekCd <= 0) {
-          m.seekT = 1.2;
-          m.seekCd = 3.0 + Math.random()*2.0;
-        }
-      }
+          let my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
 
-          // Near miss bonus (adrenaline)
+          // seeker mines: редкие, с рывками, но НЕ "невозможно убежать"
+          if (m.kind === 'seeker' && level >= 10) {
+            m.seekCd = (m.seekCd ?? 0) - dt;
+            if (m.seekT > 0) {
+              m.seekT -= dt;
+              const hx = player.x - m.x;
+              const hy = player.y - m.y;
+              const hd = Math.hypot(hx, hy) || 1;
+              if (hd < 520) {
+                const hunt = clamp(18 + (level-10)*0.8, 18, 32);
+                m.x += (hx/hd) * hunt * dt;
+                m.y += (hy/hd) * hunt * dt;
+              }
+            } else if (m.seekCd <= 0) {
+              m.seekT = 1.2;
+              m.seekCd = 3.0 + Math.random()*2.0;
+            }
+          }
+
+          const mineActive = (m.armed ?? 0) <= 0;
+
+          // Near miss bonus
           const near = (player.r + mr + 22);
           const near2 = near*near;
           const d2 = dist2(player.x, player.y, mx, my);
           if (d2 < near2 && d2 > (player.r + mr + 4) ** 2) {
             player.nearMiss += dt * 1.6;
-			player.comboTimer = 0.9; // держим комбо пока рядом опасно
+            player.comboTimer = 0.9;
           }
 
           // Player hit
           const hitR = (player.r + mr + 2);
-          if (player.invulnTime <= 0 && d2 < hitR*hitR) {
+          if (mineActive && player.invulnTime <= 0 && d2 < hitR*hitR) {
             if (!hitThisFrame) {
               hitThisFrame = true;
               damagePlayer();
             }
           }
 
-          // Tail hit (if any)
-          if (tail.points.length > 6) {
-            // check few tail points near the end (most relevant)
-            // (cheap) sample last N
-            const N = Math.min(40, tail.points.length);
+          // Tail hit
+          if (mineActive && tail.points.length > 6) {
+            const N = Math.min(32, tail.points.length);
             for (let i = tail.points.length - 1; i >= tail.points.length - N; i--) {
               const p = tail.points[i];
-              const tr = 8; // tail thickness
+              const tr = 8;
               const hr = (mr + tr);
-              if (dist2(p.x,p.y, mx,my) < hr*hr) {
-                // cut tail hard, and add adrenaline
-                loseTailSegments(140);
-                player.nearMiss += 0.25;
+
+              if (dist2(p.x, p.y, mx, my) < hr*hr) {
+                if ((m.tailCd ?? 0) <= 0) {
+                  loseTailSegments(70);
+                  m.tailCd = 0.55;
+                  player.nearMiss += 0.25;
+                }
                 break;
               }
             }
@@ -1717,17 +1830,22 @@ if (ch.mimics) {
       spawnBurst(mm.x, mm.y, 10, 22, 280);
       kickShake(14, 0.18);
 
-      // spawn extra mines around (nasty surprise)
+      // spawn extra mines around (nasty surprise, but fair)
       const count = 4 + Math.floor(Math.random()*3);
       for (let i=0;i<count;i++){
         const a = Math.random()*TAU;
-        const d = 90 + Math.random()*120;
+        const d = 110 + Math.random()*140;
         ch.mines.push({
           x: mm.x + Math.cos(a)*d,
           y: mm.y + Math.sin(a)*d,
           r: 18 + Math.random()*10,
           phase: Math.random()*TAU,
-          drift: 0.4 + Math.random()*0.9
+          drift: 0.4 + Math.random()*0.9,
+          kind: 'wobble',
+          seekCd: Math.random()*2,
+          seekT: 0,
+          armed: 0.75,
+          tailCd: 0
         });
       }
     }
@@ -1893,10 +2011,7 @@ if (ch.hunters) {
       state = 'DEAD';
 	  AudioFX.dead();
 
-		// отправка результата в онлайн
-      // отправка результата в онлайн
-      onlineSubmitResult();
-// submit score + ghost to online leaderboard
+	  // отправка результата один раз
       onlineSubmitResult();
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
       if (timeSurv > bestNow) {
@@ -2115,7 +2230,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-        drawMine(x,y,m.r * mineScaleR);
+        drawMine(x, y, m.r * mineScaleR, m.armed ?? 0);
       }
 // agar-style cells
 if (ch.cells) {
@@ -2172,6 +2287,14 @@ if (ch.hunters) {
     const x = sx(p.x), y = sy(p.y);
     if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
     drawPellet(x,y,p.r);
+  }
+
+  // extraction portal
+  if (portal) {
+    const pxPortal = sx(portal.x), pyPortal = sy(portal.y);
+    if (!(pxPortal < -180 || pyPortal < -180 || pxPortal > W + 180 || pyPortal > H + 180)) {
+      drawPortal(pxPortal, pyPortal, portal.r);
+    }
   }
 
   // ghost (online)
@@ -2430,46 +2553,76 @@ function drawCoin(x,y,r) {
   function tryExtract() {
     if (!portal || player.extracted) return false;
     const rr = player.r + portal.r;
+
     if (dist2(player.x, player.y, portal.x, portal.y) < rr*rr) {
       player.extracted = true;
       state = 'DEAD';
       overlay.style.display = 'flex';
-      msgEl.innerHTML = `<div style="font-size:28px;margin-bottom:6px;">ЭКСТРАКЦИЯ ✅</div>
-      <div style="opacity:.85">Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b></div>`;
-      btnStart.textContent = 'Заново';
-      // submit ONLY extracted in expedition
-      onlineSubmitResult(true).then(()=>onlineRefresh());
+
+      overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
+      overlay.querySelectorAll('p')[0].innerHTML =
+        `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
+      overlay.querySelectorAll('p')[1].innerHTML =
+        `Успешный выход из экспедиции. Результат отправлен в таблицу лидеров.`;
+      overlay.querySelectorAll('p')[2].innerHTML =
+        `Нажми <b>Заново</b>, чтобы начать новый забег.`;
+
+      overlay.querySelector('#start').textContent = 'Заново';
+
+      onlineSubmitResult(true).then(() => onlineRefresh());
       return true;
     }
+
     return false;
   }
 
-  function drawMine(x,y,r) {
+  function drawMine(x, y, r, armT = 0) {
     ctx.save();
-    // danger glow
-    const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.0);
-    glow.addColorStop(0, 'rgba(255,60,120,0.40)');
-    glow.addColorStop(1, 'rgba(255,60,120,0)');
+
+    const telegraph = armT > 0;
+    const pulse = telegraph ? (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() * 0.03))) : 1;
+
+    // glow
+    const glow = ctx.createRadialGradient(x, y, 1, x, y, r * 3.0);
+    if (telegraph) {
+      glow.addColorStop(0, `rgba(255,190,90,${0.18 + 0.18 * pulse})`);
+      glow.addColorStop(1, 'rgba(255,190,90,0)');
+    } else {
+      glow.addColorStop(0, 'rgba(255,60,120,0.40)');
+      glow.addColorStop(1, 'rgba(255,60,120,0)');
+    }
     ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(x,y,r*3,0,TAU); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 3, 0, TAU);
+    ctx.fill();
 
     // body
-    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
-    g.addColorStop(0,'#FF3C7A');
-    g.addColorStop(1,'#B10C3F');
+    const g = ctx.createLinearGradient(x-r, y-r, x+r, y+r);
+    if (telegraph) {
+      g.addColorStop(0, '#FFD36A');
+      g.addColorStop(1, '#C77900');
+    } else {
+      g.addColorStop(0, '#FF3C7A');
+      g.addColorStop(1, '#B10C3F');
+    }
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
 
     // spikes
-    ctx.strokeStyle = 'rgba(255,170,200,0.8)';
-    ctx.lineWidth = 3*DPR;
-    for (let i=0;i<10;i++){
-      const a = (i/10)*TAU;
+    ctx.strokeStyle = telegraph ? 'rgba(255,240,180,0.9)' : 'rgba(255,170,200,0.8)';
+    ctx.lineWidth = 3 * DPR;
+    for (let i=0; i<10; i++) {
+      const a = (i/10) * TAU;
       const x1 = x + Math.cos(a) * (r*0.92);
       const y1 = y + Math.sin(a) * (r*0.92);
       const x2 = x + Math.cos(a) * (r*1.18);
       const y2 = y + Math.sin(a) * (r*1.18);
-      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
     }
 
     ctx.restore();
