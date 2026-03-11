@@ -174,6 +174,8 @@
 
     let musicTimer = null;
     let musicPhase = 0;
+    let musicDayKey = 0;
+    let musicProfile = null;
 
     function ensure() {
       if (ctx) return;
@@ -228,44 +230,150 @@
       if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
     }
 
+	function makeDailyMusicProfile() {
+      const day = dailySeedUTC() >>> 0;
+      const presets = [
+        {
+          name: 'void',
+          root: 110,
+          scale: [0, 3, 7, 10],
+          lp: 520,
+          stepMin: 1800,
+          stepMax: 3200,
+          oscA: 'sine',
+          oscB: 'triangle',
+          spread: 7
+        },
+        {
+          name: 'nebula',
+          root: 138.59,
+          scale: [0, 2, 5, 9],
+          lp: 760,
+          stepMin: 1500,
+          stepMax: 2800,
+          oscA: 'triangle',
+          oscB: 'sine',
+          spread: 10
+        },
+        {
+          name: 'ice',
+          root: 146.83,
+          scale: [0, 5, 7, 12],
+          lp: 980,
+          stepMin: 1700,
+          stepMax: 3000,
+          oscA: 'sine',
+          oscB: 'sine',
+          spread: 4
+        },
+        {
+          name: 'toxic',
+          root: 123.47,
+          scale: [0, 3, 6, 10],
+          lp: 640,
+          stepMin: 1400,
+          stepMax: 2500,
+          oscA: 'triangle',
+          oscB: 'square',
+          spread: 6
+        },
+        {
+          name: 'lava',
+          root: 98,
+          scale: [0, 1, 5, 8],
+          lp: 480,
+          stepMin: 1300,
+          stepMax: 2200,
+          oscA: 'triangle',
+          oscB: 'triangle',
+          spread: 12
+        }
+      ];
+
+      const preset = presets[day % presets.length];
+      return { day, ...preset };
+    }
+
+    function musicVoice(freq, start, dur, vol, type='sine', lp=700, detune=0) {
+      if (!ctx || !musGain) return;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const f = ctx.createBiquadFilter();
+
+      o.type = type;
+      o.frequency.setValueAtTime(freq, start);
+      o.detune.setValueAtTime(detune, start);
+
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(lp, start);
+      f.Q.setValueAtTime(0.8, start);
+
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), start + 0.9);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * 0.45), start + Math.max(1.6, dur * 0.55));
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+      o.connect(f);
+      f.connect(g);
+      g.connect(musGain);
+
+      o.start(start);
+      o.stop(start + dur + 0.08);
+    }
+	  
     function startMusic() {
       ensure();
       stopMusic();
-      // мягкий эмбиент: редкие "нотки", без пилы
-      const scale = [0, 3, 5, 7, 10]; // минор пентатоника
-      const base = 196; // G3
+
+      musicPhase = 0;
+      musicDayKey = 0;
+      musicProfile = null;
+
       const playOne = () => {
         if (!musicOn || !ctx) return;
+
+        const today = dailySeedUTC() >>> 0;
+        if (!musicProfile || musicDayKey !== today) {
+          musicProfile = makeDailyMusicProfile();
+          musicDayKey = musicProfile.day;
+          musicPhase = 0;
+        }
+
         const now = ctx.currentTime;
-        const note = scale[(musicPhase + Math.floor(Math.random()*2)) % scale.length];
-        const freq = base * Math.pow(2, note/12) * (Math.random() < 0.5 ? 1 : 2);
-        musicPhase = (musicPhase + 1) % scale.length;
+        const p = musicProfile;
+        const scale = p.scale;
 
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(freq, now);
+        const degreeA = scale[musicPhase % scale.length];
+        const degreeB = scale[(musicPhase + 2) % scale.length];
+        const baseFreq = p.root * Math.pow(2, degreeA / 12);
+        const upperFreq = p.root * Math.pow(2, (degreeB + 12) / 12);
+        const subFreq = p.root * 0.5;
 
-        // огибающая
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+        // низкий дрон
+        musicVoice(subFreq, now, 4.8, 0.040, p.oscA, p.lp * 0.72, -p.spread);
 
-        // лёгкий lowpass
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass';
-        f.frequency.setValueAtTime(700, now);
+        // основная подушка
+        musicVoice(baseFreq, now, 3.6 + Math.random() * 0.9, 0.065, p.oscA, p.lp, p.spread);
 
-        o.connect(f);
-        f.connect(g);
-        g.connect(musGain);
+        // верхний "воздух"
+        if (Math.random() < 0.88) {
+          musicVoice(upperFreq, now + 0.22, 2.8 + Math.random() * 0.8, 0.042, p.oscB, p.lp + 220, -p.spread * 0.5);
+        }
 
-        o.start(now);
-        o.stop(now + 0.60);
+        // редкий дополнительный тон
+        if (Math.random() < 0.32) {
+          const degreeC = scale[(musicPhase + 1) % scale.length];
+          const midFreq = p.root * Math.pow(2, degreeC / 12) * 2;
+          musicVoice(midFreq, now + 0.08, 2.2, 0.028, 'sine', p.lp + 120, 0);
+        }
 
-        const next = 520 + Math.random()*600; // пауза между нотами
+        musicPhase = (musicPhase + 1) % (scale.length * 2);
+
+        const next = p.stepMin + Math.random() * (p.stepMax - p.stepMin);
         musicTimer = setTimeout(playOne, next);
       };
+
       playOne();
     }
 
@@ -1115,7 +1223,9 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   });
 
   AudioFX.autoUnlock();
-
+	document.getElementById("btnMusic").style.opacity =
+    ((localStorage.getItem('newsnake_mus') ?? '0') === '1') ? "1" : "0.55";
+	
 	document.getElementById("btnSound").onclick = async () => {
 	  await AudioFX.unlock();
 	  const on = AudioFX.toggleEnabled();
