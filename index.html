@@ -173,6 +173,7 @@
     let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.20');
 
     let musicTimer = null;
+    let musicPulseTimer = null;
     let musicPhase = 0;
     let musicDayKey = 0;
     let musicProfile = null;
@@ -228,6 +229,7 @@
 
     function stopMusic() {
       if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+      if (musicPulseTimer) { clearTimeout(musicPulseTimer); musicPulseTimer = null; }
     }
 
 	function makeDailyMusicProfile() {
@@ -235,58 +237,58 @@
       const presets = [
         {
           name: 'void',
-          root: 110,
+          root: 82.41,
           scale: [0, 3, 7, 10],
-          lp: 520,
-          stepMin: 1800,
-          stepMax: 3200,
+          lp: 420,
+          stepMin: 2200,
+          stepMax: 3600,
           oscA: 'sine',
           oscB: 'triangle',
-          spread: 7
+          spread: 6
         },
         {
           name: 'nebula',
-          root: 138.59,
+          root: 98.00,
           scale: [0, 2, 5, 9],
-          lp: 760,
-          stepMin: 1500,
-          stepMax: 2800,
+          lp: 620,
+          stepMin: 1800,
+          stepMax: 3100,
           oscA: 'triangle',
           oscB: 'sine',
-          spread: 10
+          spread: 8
         },
         {
           name: 'ice',
-          root: 146.83,
+          root: 110.00,
           scale: [0, 5, 7, 12],
-          lp: 980,
-          stepMin: 1700,
-          stepMax: 3000,
+          lp: 760,
+          stepMin: 2100,
+          stepMax: 3400,
           oscA: 'sine',
           oscB: 'sine',
           spread: 4
         },
         {
           name: 'toxic',
-          root: 123.47,
+          root: 87.31,
           scale: [0, 3, 6, 10],
-          lp: 640,
-          stepMin: 1400,
-          stepMax: 2500,
+          lp: 520,
+          stepMin: 1700,
+          stepMax: 2900,
           oscA: 'triangle',
           oscB: 'square',
           spread: 6
         },
         {
           name: 'lava',
-          root: 98,
+          root: 73.42,
           scale: [0, 1, 5, 8],
-          lp: 480,
-          stepMin: 1300,
-          stepMax: 2200,
+          lp: 360,
+          stepMin: 1500,
+          stepMax: 2400,
           oscA: 'triangle',
           oscB: 'triangle',
-          spread: 12
+          spread: 10
         }
       ];
 
@@ -321,6 +323,110 @@
       o.start(start);
       o.stop(start + dur + 0.08);
     }
+
+	function musicKick(start, baseFreq = 48, vol = 0.9) {
+      if (!ctx || !musGain) return;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const f = ctx.createBiquadFilter();
+
+      o.type = 'sine';
+      o.frequency.setValueAtTime(baseFreq * 1.9, start);
+      o.frequency.exponentialRampToValueAtTime(baseFreq, start + 0.09);
+      o.frequency.exponentialRampToValueAtTime(Math.max(28, baseFreq * 0.72), start + 0.22);
+
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(140, start);
+      f.Q.setValueAtTime(1.2, start);
+
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.16 * vol, start + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.26);
+
+      o.connect(f);
+      f.connect(g);
+      g.connect(musGain);
+
+      o.start(start);
+      o.stop(start + 0.30);
+    }
+
+    function musicSubPulse(start, freq = 42, dur = 1.6, vol = 0.7) {
+      if (!ctx || !musGain) return;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const f = ctx.createBiquadFilter();
+
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, start);
+
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(120, start);
+      f.Q.setValueAtTime(0.7, start);
+
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.08 * vol, start + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.045 * vol, start + 0.55);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+      o.connect(f);
+      f.connect(g);
+      g.connect(musGain);
+
+      o.start(start);
+      o.stop(start + dur + 0.05);
+    }
+
+    function startMusicPulse() {
+      if (!musicOn || !ctx) return;
+
+      const pulseLoop = () => {
+        if (!musicOn || !ctx) return;
+
+        const today = dailySeedUTC() >>> 0;
+        if (!musicProfile || musicDayKey !== today) {
+          musicProfile = makeDailyMusicProfile();
+          musicDayKey = musicProfile.day;
+        }
+
+        const p = musicProfile;
+        const now = ctx.currentTime;
+
+        let kickBase = 46;
+        let subBase = 40;
+        let intervalMin = 2400;
+        let intervalMax = 4200;
+
+        if (p.name === 'void') {
+          kickBase = 44; subBase = 38; intervalMin = 3200; intervalMax = 5200;
+        } else if (p.name === 'nebula') {
+          kickBase = 48; subBase = 42; intervalMin = 2600; intervalMax = 4200;
+        } else if (p.name === 'ice') {
+          kickBase = 50; subBase = 44; intervalMin = 3000; intervalMax = 4800;
+        } else if (p.name === 'toxic') {
+          kickBase = 45; subBase = 39; intervalMin = 2200; intervalMax = 3600;
+        } else if (p.name === 'lava') {
+          kickBase = 42; subBase = 36; intervalMin = 1800; intervalMax = 3200;
+        }
+
+        musicSubPulse(now, subBase, 1.8, 0.85);
+
+        if (Math.random() < 0.82) {
+          musicKick(now + 0.02, kickBase, 0.95);
+        }
+
+        if (Math.random() < 0.38) {
+          musicKick(now + 0.72 + Math.random() * 0.18, kickBase * 0.98, 0.55);
+        }
+
+        const next = intervalMin + Math.random() * (intervalMax - intervalMin);
+        musicPulseTimer = setTimeout(pulseLoop, next);
+      };
+
+      pulseLoop();
+    }
 	  
     function startMusic() {
       ensure();
@@ -329,6 +435,8 @@
       musicPhase = 0;
       musicDayKey = 0;
       musicProfile = null;
+
+      startMusicPulse();
 
       const playOne = () => {
         if (!musicOn || !ctx) return;
