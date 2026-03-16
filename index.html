@@ -663,10 +663,26 @@
     if (Number.isFinite(n) && n > 0) return (n >>> 0);
     return (dailySeedUTC() >>> 0);
   })();
-  const MODE = 'score';
-  const CHUNK = 900;                                 // world chunk size
-  const VIEW_PAD = 1400;                             // generate slightly beyond screen
-  const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
+    const MODE = 'score';
+    const CHUNK = 900;                                 // world chunk size
+    const VIEW_PAD = 1400;                             // generate slightly beyond screen
+    const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
+
+    const NET_ENABLED = new URLSearchParams(location.search).get('net') === '1';
+    const NET_ROOM = (new URLSearchParams(location.search).get('room') || 'daily').trim().slice(0, 24) || 'daily';
+
+    const NET = {
+      ws: null,
+      connected: false,
+      id: null,
+      room: NET_ROOM,
+      players: new Map(),
+      sendAcc: 0,
+      spawn: null,
+      color: '#79C8FF',
+      onlineCount: 1,
+      reconnectTimer: null,
+    };
 
   // ==========================
   // Online leaderboard + ghost (Cloudflare Pages Functions)
@@ -729,10 +745,179 @@
     if (!n) return;
     ONLINE.name = n;
     localStorage.setItem('newsnake_name', n);
+    netSend({ type: 'rename', name: n });
+  }
+
+  // ==========================
+  // Realtime network (Node.js + ws)
+  // ==========================
+  function netWsUrl() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${location.host}/ws`;
+  }
+
+  function netSend(obj) {
+    if (!NET_ENABLED) return;
+    if (!NET.ws || NET.ws.readyState !== 1) return;
+    NET.ws.send(JSON.stringify(obj));
+  }
+
+  function netConnect() {
+    if (!NET_ENABLED) return;
+    if (NET.ws && (NET.ws.readyState === 0 || NET.ws.readyState === 1)) return;
+
+    const ws = new WebSocket(netWsUrl());
+    NET.ws = ws;
+
+    ws.onopen = () => {
+      NET.connected = true;
+      NET.sendAcc = 0;
+      netSend({
+        type: 'hello',
+        room: NET.room,
+        name: ONLINE.name || 'anon',
+      });
+    };
+
+    ws.onmessage = (ev) => {
+      let msg = null;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (!msg) return;
+
+      if (msg.type === 'welcome') {
+        NET.id = msg.id;
+        NET.color = msg.color || NET.color;
+        NET.spawn = msg.spawn || { x: 0, y: 0 };
+
+        if (state !== 'RUN' || timeSurv < 0.15) {
+          player.x = NET.spawn.x;
+          player.y = NET.spawn.y;
+          cam.x = player.x;
+          cam.y = player.y;
+        }
+        return;
+      }
+
+      if (msg.type === 'snapshot') {
+        NET.players.clear();
+
+        if (Array.isArray(msg.players)) {
+          for (const p of msg.players) {
+            if (!p || p.id === NET.id) continue;
+            NET.players.set(p.id, p);
+          }
+        }
+
+        NET.onlineCount = 1 + NET.players.size;
+      }
+    };
+
+    ws.onclose = () => {
+      NET.connected = false;
+      NET.players.clear();
+      NET.onlineCount = 1;
+
+      clearTimeout(NET.reconnectTimer);
+      NET.reconnectTimer = setTimeout(() => {
+        netConnect();
+      }, 1500);
+    };
+
+    ws.onerror = () => {};
+  }
+
+  function netTick(dt) {
+    if (!NET_ENABLED) return;
+    if (!NET.connected) return;
+
+    NET.sendAcc += dt;
+    if (NET.sendAcc < 0.06) return;
+    NET.sendAcc = 0;
+
+    netSend({
+      type: 'state',
+      x: Math.round(player.x),
+      y: Math.round(player.y),
+      r: +player.r.toFixed(2),
+      hp: player.hp | 0,
+      score: player.score | 0,
+      alive: state === 'RUN',
+      extracted: !!player.extracted,
+    });
+  }
+
+  function drawNetPlayer(x, y, r, name, color, rel) {
+    ctx.save();
+
+    // shadow
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = 'rgba(0,0,0,0.40)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + r * 0.9, r * 1.0, r * 0.55, 0, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // body
+    const g = ctx.createLinearGradient(x-r, y-r, x+r, y+r);
+    g.addColorStop(0, '#FFFFFF');
+    g.addColorStop(0.18, color || '#79C8FF');
+    g.addColorStop(1, 'rgba(25,35,70,1)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+
+    // comparison ring
+    if (rel !== 0) {
+      ctx.strokeStyle = rel > 0 ? 'rgba(110,255,170,0.95)' : 'rgba(255,110,140,0.95)';
+      ctx.lineWidth = 3 * DPR;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.08, 0, TAU);
+      ctx.stroke();
+    }
+
+    // hp ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+    ctx.lineWidth = 2 * DPR;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.02, 0, TAU);
+    ctx.stroke();
+
+    // nick
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(String(name || 'anon').slice(0, 18), x, y - r - 8 * DPR);
+
+    ctx.restore();
+  }
+
+  function netDrawPlayers(sx, sy) {
+    if (!NET_ENABLED) return;
+    if (!NET.players.size) return;
+
+    const eatF = 1.12;
+
+    for (const p of NET.players.values()) {
+      if (!p.alive) continue;
+
+      const x = sx(p.x);
+      const y = sy(p.y);
+
+      if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
+
+      const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
+      drawNetPlayer(x, y, p.r, p.name, p.color, rel);
+    }
   }
 
   function onlineInitUI() {
-    if (onlineSeedEl) onlineSeedEl.textContent = `seed ${SEED}`;
+    if (onlineSeedEl) {
+      onlineSeedEl.textContent = NET_ENABLED
+        ? `room ${NET_ROOM} • seed ${SEED}`
+        : `seed ${SEED}`;
+    }
     if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
     if (onlinePanelEl) onlinePanelEl.style.display = 'none';
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
@@ -1269,7 +1454,8 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
 	AudioFX.click();
   }
   function resetGame() {
-    player.x = 0; player.y = 0;
+    const netSpawn = (NET_ENABLED && NET.spawn) ? NET.spawn : { x: 0, y: 0 };
+    player.x = netSpawn.x; player.y = netSpawn.y;
     player.vx = 0; player.vy = 0;
     player.hp = 3;
     player.coins = 0;
@@ -1763,6 +1949,8 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
       updateFX(dt);
 
       if (performance.now() - (ONLINE.lastRefreshAt || 0) > 30000) onlineRefresh();
+
+      netTick(dt);
 
       // update HUD
       updateHUD();
@@ -2517,6 +2705,9 @@ if (ch.hunters) {
 
   // ghost (online)
   onlineGhostDraw(sx, sy);
+
+  // real online players
+  netDrawPlayers(sx, sy);
 
   // player (world)
   drawPlayer(sx(player.x), sy(player.y), player.r);
@@ -3287,6 +3478,7 @@ function drawPlayerOutline(x,y,r){
   // ==========================
   onlineInitUI();
   onlineRefresh();
+  netConnect();
 
   resetGame();
   requestAnimationFrame(loop);
