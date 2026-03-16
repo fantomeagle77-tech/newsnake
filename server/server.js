@@ -6,7 +6,7 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, '..', 'client');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
