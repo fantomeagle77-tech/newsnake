@@ -323,11 +323,11 @@
     function makeDailyMusicProfile() {
       const day = dailySeedUTC() >>> 0;
       const presets = [
-        { name:'void',   root:82.41, scale:[0,3,7,10], lp:420, stepMin:2200, stepMax:3600, oscA:'sine',     oscB:'triangle', spread:6 },
-        { name:'nebula', root:98.00, scale:[0,2,5,9],  lp:620, stepMin:1800, stepMax:3100, oscA:'triangle', oscB:'sine',     spread:8 },
-        { name:'ice',    root:110.0, scale:[0,5,7,12], lp:760, stepMin:2100, stepMax:3400, oscA:'sine',     oscB:'sine',     spread:4 },
-        { name:'toxic',  root:87.31, scale:[0,3,6,10], lp:520, stepMin:1700, stepMax:2900, oscA:'triangle', oscB:'square',   spread:6 },
-        { name:'lava',   root:73.42, scale:[0,1,5,8],  lp:360, stepMin:1500, stepMax:2400, oscA:'triangle', oscB:'triangle', spread:10 },
+        { name:'void',   root:98.00,  scale:[0,2,7,9],   lp:720,  stepMin:1800, stepMax:3000, oscA:'sine',     oscB:'triangle', spread:4 },
+        { name:'nebula', root:123.47, scale:[0,4,7,11],  lp:980,  stepMin:1500, stepMax:2500, oscA:'triangle', oscB:'sine',     spread:6 },
+        { name:'ice',    root:146.83, scale:[0,5,9,12],  lp:1200, stepMin:1700, stepMax:2800, oscA:'sine',     oscB:'sine',     spread:3 },
+        { name:'toxic',  root:110.00, scale:[0,3,7,10],  lp:820,  stepMin:1600, stepMax:2700, oscA:'triangle', oscB:'triangle', spread:5 },
+        { name:'lava',   root:92.50,  scale:[0,5,7,10],  lp:640,  stepMin:1400, stepMax:2300, oscA:'triangle', oscB:'sine',     spread:5 },
       ];
       const preset = presets[day % presets.length];
       return { day, ...preset };
@@ -361,35 +361,34 @@
       o.stop(start + dur + 0.08);
     }
 
-    function musicKick(start, baseFreq = 46, vol = 0.9) {
+    function musicKick(start, baseFreq = 54, vol = 0.55) {
       if (!ctx || !musGain) return;
 
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       const f = ctx.createBiquadFilter();
 
-      o.type = 'sine';
-      o.frequency.setValueAtTime(baseFreq * 1.9, start);
-      o.frequency.exponentialRampToValueAtTime(baseFreq, start + 0.09);
-      o.frequency.exponentialRampToValueAtTime(Math.max(28, baseFreq * 0.72), start + 0.22);
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(baseFreq * 1.22, start);
+      o.frequency.exponentialRampToValueAtTime(baseFreq, start + 0.14);
 
       f.type = 'lowpass';
-      f.frequency.setValueAtTime(140, start);
-      f.Q.setValueAtTime(1.2, start);
+      f.frequency.setValueAtTime(220, start);
+      f.Q.setValueAtTime(0.45, start);
 
       g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.14 * vol, start + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.26);
+      g.gain.exponentialRampToValueAtTime(0.075 * vol, start + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.52);
 
       o.connect(f);
       f.connect(g);
       g.connect(musGain);
 
       o.start(start);
-      o.stop(start + 0.30);
+      o.stop(start + 0.58);
     }
 
-    function musicSubPulse(start, freq = 40, dur = 1.7, vol = 0.75) {
+    function musicSubPulse(start, freq = 52, dur = 2.2, vol = 0.50) {
       if (!ctx || !musGain) return;
 
       const o = ctx.createOscillator();
@@ -400,12 +399,12 @@
       o.frequency.setValueAtTime(freq, start);
 
       f.type = 'lowpass';
-      f.frequency.setValueAtTime(120, start);
-      f.Q.setValueAtTime(0.7, start);
+      f.frequency.setValueAtTime(180, start);
+      f.Q.setValueAtTime(0.5, start);
 
       g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.07 * vol, start + 0.04);
-      g.gain.exponentialRampToValueAtTime(0.038 * vol, start + 0.55);
+      g.gain.exponentialRampToValueAtTime(0.035 * vol, start + 0.10);
+      g.gain.exponentialRampToValueAtTime(0.022 * vol, start + 0.85);
       g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
 
       o.connect(f);
@@ -431,16 +430,15 @@
         const p = musicProfile;
         const now = ctx.currentTime;
 
-        let kickBase = 46, subBase = 40, intervalMin = 2600, intervalMax = 4400;
-        if (p.name === 'void')   { kickBase = 44; subBase = 38; intervalMin = 3200; intervalMax = 5200; }
-        if (p.name === 'nebula') { kickBase = 48; subBase = 42; intervalMin = 2500; intervalMax = 4200; }
-        if (p.name === 'ice')    { kickBase = 50; subBase = 44; intervalMin = 3000; intervalMax = 4800; }
-        if (p.name === 'toxic')  { kickBase = 45; subBase = 39; intervalMin = 2200; intervalMax = 3600; }
-        if (p.name === 'lava')   { kickBase = 42; subBase = 36; intervalMin = 1800; intervalMax = 3200; }
+        let kickBase = 56, subBase = 52, intervalMin = 4200, intervalMax = 6800;
+        if (p.name === 'void')   { kickBase = 54; subBase = 50; intervalMin = 4800; intervalMax = 7600; }
+        if (p.name === 'nebula') { kickBase = 58; subBase = 54; intervalMin = 3600; intervalMax = 5600; }
+        if (p.name === 'ice')    { kickBase = 62; subBase = 58; intervalMin = 4200; intervalMax = 6400; }
+        if (p.name === 'toxic')  { kickBase = 55; subBase = 51; intervalMin = 3800; intervalMax = 6000; }
+        if (p.name === 'lava')   { kickBase = 52; subBase = 48; intervalMin = 3400; intervalMax = 5200; }
 
-        musicSubPulse(now, subBase, 1.8, 0.82);
-        if (Math.random() < 0.84) musicKick(now + 0.02, kickBase, 0.92);
-        if (Math.random() < 0.34) musicKick(now + 0.72 + Math.random()*0.18, kickBase * 0.98, 0.52);
+        musicSubPulse(now, subBase, 2.4, 0.48);
+        if (Math.random() < 0.38) musicKick(now + 0.10, kickBase, 0.48);
 
         const next = intervalMin + Math.random() * (intervalMax - intervalMin);
         musicPulseTimer = setTimeout(pulseLoop, next);
@@ -475,21 +473,22 @@
 
         const degreeA = scale[musicPhase % scale.length];
         const degreeB = scale[(musicPhase + 2) % scale.length];
+        const degreeC = scale[(musicPhase + 1) % scale.length];
+
         const baseFreq = p.root * Math.pow(2, degreeA / 12);
         const upperFreq = p.root * Math.pow(2, (degreeB + 12) / 12);
-        const subFreq = p.root * 0.5;
+        const midFreq = p.root * Math.pow(2, (degreeC + 7) / 12);
+        const airFreq = p.root * Math.pow(2, (degreeB + 19) / 12);
 
-        musicVoice(subFreq, now, 4.8, 0.032, p.oscA, p.lp * 0.72, -p.spread);
-        musicVoice(baseFreq, now, 3.4 + Math.random()*0.8, 0.056, p.oscA, p.lp, p.spread);
+        musicVoice(baseFreq, now, 4.8 + Math.random()*1.2, 0.050, p.oscA, p.lp, -p.spread * 0.3);
+        musicVoice(midFreq, now + 0.18, 3.8 + Math.random()*0.9, 0.032, p.oscB, p.lp + 180, p.spread * 0.35);
 
-        if (Math.random() < 0.88) {
-          musicVoice(upperFreq, now + 0.22, 2.6 + Math.random()*0.7, 0.036, p.oscB, p.lp + 220, -p.spread * 0.5);
+        if (Math.random() < 0.92) {
+          musicVoice(upperFreq, now + 0.36, 3.1 + Math.random()*0.8, 0.026, 'sine', p.lp + 320, -p.spread * 0.2);
         }
 
-        if (Math.random() < 0.28) {
-          const degreeC = scale[(musicPhase + 1) % scale.length];
-          const midFreq = p.root * Math.pow(2, degreeC / 12) * 2;
-          musicVoice(midFreq, now + 0.08, 2.0, 0.022, 'sine', p.lp + 120, 0);
+        if (Math.random() < 0.58) {
+          musicVoice(airFreq, now + 0.54, 2.4 + Math.random()*0.6, 0.014, 'sine', p.lp + 520, 0);
         }
 
         musicPhase = (musicPhase + 1) % (scale.length * 2);
@@ -3137,35 +3136,28 @@ function pathWobblyConeMask(cx, cy, ang, len, half, amp, t) {
 
 
 function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
-  // Rounded "capsule wedge" beam (uses maskCtx)
-  const dx = Math.cos(ang), dy = Math.sin(ang);
-  const lx = -dy, ly = dx;
+  // Real flashlight cone with narrow neck and soft rounded head (uses maskCtx)
+  const dirX = Math.cos(ang), dirY = Math.sin(ang);
+  const sideX = -dirY, sideY = dirX;
 
-  // shift start a bit forward so it doesn't look like a bubble
-  const sx = px + dx * (startR * 0.6);
-  const sy = py + dy * (startR * 0.6);
+  const neckLen = Math.min(len * 0.14, startR * 3.2);
+  const sx = px + dirX * (startR * 0.55);
+  const sy = py + dirY * (startR * 0.55);
+  const nx = px + dirX * neckLen;
+  const ny = py + dirY * neckLen;
+  const ex = px + dirX * len;
+  const ey = py + dirY * len;
 
-  const ex = px + dx * len;
-  const ey = py + dy * len;
-
-  // left/right edges
-  const ax = sx + lx * startR, ay = sy + ly * startR;
-  const bx = ex + lx * endR,   by = ey + ly * endR;
-  const cx = ex - lx * endR,   cy = ey - ly * endR;
-  const dx2= sx - lx * startR, dy2= sy - ly * startR;
+  const sHalf = startR * 0.62;
+  const nHalf = Math.max(sHalf * 1.15, endR * 0.18);
 
   maskCtx.beginPath();
-  maskCtx.moveTo(ax, ay);
-  maskCtx.lineTo(bx, by);
-
-  // round head
-  maskCtx.arc(ex, ey, endR, ang + Math.PI/2, ang - Math.PI/2, true);
-
-  maskCtx.lineTo(dx2, dy2);
-
-  // small round at start
-  maskCtx.arc(sx, sy, startR, ang - Math.PI/2, ang + Math.PI/2, true);
-
+  maskCtx.moveTo(px + sideX * sHalf, py + sideY * sHalf);
+  maskCtx.quadraticCurveTo(sx + sideX * sHalf, sy + sideY * sHalf, nx + sideX * nHalf, ny + sideY * nHalf);
+  maskCtx.lineTo(ex + sideX * endR, ey + sideY * endR);
+  maskCtx.quadraticCurveTo(ex + dirX * endR * 0.22, ey + dirY * endR * 0.22, ex - sideX * endR, ey - sideY * endR);
+  maskCtx.lineTo(nx - sideX * nHalf, ny - sideY * nHalf);
+  maskCtx.quadraticCurveTo(sx - sideX * sHalf, sy - sideY * sHalf, px - sideX * sHalf, py - sideY * sHalf);
   maskCtx.closePath();
 }
   function render() {
@@ -3200,7 +3192,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   const base = Math.min(W, H) * 0.36;
   const shrink = clamp(level * 22, 0, base * 0.70);
   const sizePenalty = clamp((sizeRatioR - 1) * 14, 0, base * 0.22);
-  const torchBoost = (player.torchTime > 0) ? base * 1.30 : 0;
+  const torchBoost = (player.torchTime > 0) ? base * 1.05 : 0;
   const vis = clamp(base - shrink - sizePenalty + torchBoost, 240 * DPR, 1040 * DPR);
 
   const mineScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.45, 1.0);
@@ -3209,14 +3201,14 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   const zoomOpen = clamp((1 - viewZoom) / 0.42, 0, 1);
 
   // flashlight parameters (screen space)
-  const beamLen = vis * viewZoom * 1.18;
-  const beamHalf = lerp(0.30, 0.22, zoomOpen);
-  const startR = clamp(renderR * 0.55, 14*DPR, 30*DPR);
-  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.88, 62*DPR, 138*DPR);
-  const featherPx = (24 + zoomOpen * 10) * DPR;
+  const beamLen = vis * viewZoom * 1.42;
+  const beamHalf = lerp(0.19, 0.14, zoomOpen);
+  const startR = clamp(renderR * 0.18, 8*DPR, 16*DPR);
+  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.72, 40*DPR, 92*DPR);
+  const featherPx = (18 + zoomOpen * 8) * DPR;
 
   // small aura around player
-  const auraR = clamp(renderR * 3.2, 58*DPR, 220*DPR);
+  const auraR = clamp(renderR * 1.95, 42*DPR, 124*DPR);
 
   // === 1) Draw the WORLD full-screen (it will be masked) ===
   drawBackground();
@@ -3399,14 +3391,14 @@ if (ch.hunters) {
   pathFlashlightBeamMask(px, py, ang, startR, beamLen, endR2);
   maskCtx.fill();
 
-  // aura feather
+  // local light around player
   maskCtx.beginPath();
   maskCtx.arc(px, py, auraR, 0, TAU);
   maskCtx.fill();
 
-  // aura core
+  // tighter center core
   maskCtx.beginPath();
-  maskCtx.arc(px, py, auraR, 0, TAU);
+  maskCtx.arc(px, py, auraR * 0.58, 0, TAU);
   maskCtx.fill();
 
   // soft edge (vignette)
