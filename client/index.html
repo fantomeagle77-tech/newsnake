@@ -1952,9 +1952,11 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
       if (ch.relics) {
         for (const rr of ch.relics) {
           if (collected.has(rr.id)) continue;
-          const x = sx(rr.x), y = sy(rr.y);
-          if (x<-140 || y<-140 || x>W+140 || y>H+140) continue;
-          drawRelic(x,y,rr.r, rr.type);
+          const grabR = player.r + rr.r + 10;
+          if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
+            collected.add(rr.id);
+            applyRelic(rr.type);
+          }
         }
       }
 
