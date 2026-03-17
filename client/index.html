@@ -1493,6 +1493,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 	comboTimer: 0,
 	torchTime: 0,
     invulnTime: 0,
+    spawnGrace: 0,
     slowMul: 1,
     ejectCd: 0,
     
@@ -1672,7 +1673,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     player.combo = 0;
     player.comboTimer = 0;
     player.torchTime = 0;
-    player.invulnTime = 1.1;
+    player.invulnTime = 1.35;
+    player.spawnGrace = 1.8;
 
     player.relics = [];
     player.mods = { beam:0, aura:0, magnet:0, echo:0, antiSlow:0 };
@@ -1928,34 +1930,35 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     const nx = dx/d, ny = dy/d;
 
     const b = currentBiome;
-    let sp = 92 + level*5;
-    if (b === 'ice') sp += 10;
-    if (b === 'lava') sp += 20;
+    let sp = 76 + level*3.2;
+    if (b === 'ice') sp += 8;
+    if (b === 'lava') sp += 12;
 
-    if (boss.warmup > 0) sp *= 0.42;
-    if (boss.retreat > 0) sp *= 0.85;
+    if (boss.warmup > 0) sp *= 0.30;
+    if (boss.retreat > 0) sp *= 0.68;
+    if (player.spawnGrace > 0) sp *= 0.08;
 
-    boss.phase += dt * (boss.warmup > 0 ? 0.8 : 1.1);
-    const wx = Math.cos(boss.phase) * 24;
-    const wy = Math.sin(boss.phase*1.1) * 24;
+    boss.phase += dt * (boss.warmup > 0 ? 0.66 : 0.88);
+    const wx = Math.cos(boss.phase) * 16;
+    const wy = Math.sin(boss.phase*1.1) * 16;
 
-    const dirMul = boss.retreat > 0 ? -1 : 1;
+    const dirMul = (boss.retreat > 0 || player.spawnGrace > 0) ? -1 : 1;
     boss.vx = boss.vx*0.90 + ((nx*dirMul)*sp + wx)*0.20;
     boss.vy = boss.vy*0.90 + ((ny*dirMul)*sp + wy)*0.20;
 
     boss.x += boss.vx * dt;
     boss.y += boss.vy * dt;
 
-    if (d < 1600) {
-      player.nearMiss += dt * 1.2;
-      kickShake(5, 0.07);
+    if (d < 1350) {
+      player.nearMiss += dt * 0.7;
+      kickShake(3, 0.04);
     }
-    if (d < 950 && boss.warmup <= 0) {
-      kickShake(9, 0.10);
+    if (d < 760 && boss.warmup <= 0) {
+      kickShake(5, 0.06);
     }
 
     const rr = player.r + boss.r;
-    if (boss.warmup <= 0 && boss.hitCd <= 0 && dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
+    if (player.spawnGrace <= 0 && boss.warmup <= 0 && boss.hitCd <= 0 && dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
       if (player.r > boss.r * 1.12) {
         boss.active = false;
         boss.cd = 14.0;
@@ -1965,9 +1968,9 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
         spawnBurst(boss.x, boss.y, 30, 30, 280);
         kickShake(16, 0.18);
       } else if (player.invulnTime <= 0) {
-        boss.hitCd = 1.4;
-        boss.retreat = 2.2;
-        boss.ttl = Math.min(boss.ttl, 8.0);
+        boss.hitCd = 1.8;
+        boss.retreat = 3.4;
+        boss.ttl = Math.min(boss.ttl, 7.0);
         player.coins = Math.max(0, player.coins - 8);
         loseTailSegments(260);
         spawnBurst(player.x, player.y, 350, 16, 240);
@@ -2066,6 +2069,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
       onlineGhostStep();
 	  player.torchTime = Math.max(0, player.torchTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
+      player.spawnGrace = Math.max(0, player.spawnGrace - dt);
       player.shieldTime = Math.max(0, player.shieldTime - dt);
       if (player.shieldTime <= 0 && player.shieldHits > 0) player.shieldHits = 0;
 
@@ -2377,19 +2381,21 @@ if (ch.cells) {
     const dy = player.y - cc.y;
     const d = Math.hypot(dx, dy) || 1;
 
+    cc.contactCd = Math.max(0, (cc.contactCd || 0) - dt);
+
     const youBigger = player.r > cc.r * 1.12;
     const youSmaller = player.r < cc.r * 0.92;
 
     // behavior near player
-    if (d < 650) {
-      if (youBigger) {
-        // flee
-        const flee = (cc.kind === 'bully') ? 75 : 110;
+    if (d < 560) {
+      if (youBigger || player.spawnGrace > 0 || cc.contactCd > 0) {
+        // flee / disengage
+        const flee = (cc.kind === 'bully') ? 95 : 130;
         vx -= (dx/d) * flee;
         vy -= (dy/d) * flee;
-      } else if (youSmaller && cc.kind === 'bully') {
-        // bully chases
-        const chase = 70 + level * 2;
+      } else if (youSmaller && cc.kind === 'bully' && d < 420) {
+        // bully chases, but not magnetically forever
+        const chase = 46 + level * 1.35;
         vx += (dx/d) * chase;
         vy += (dy/d) * chase;
       }
@@ -2413,8 +2419,12 @@ if (ch.cells) {
         kickShake(6, 0.10);
       } else if (player.r < cc.r * 0.92) {
         damagePlayer();
+        cc.contactCd = 1.4;
+        cc.vx -= (dx/d) * 180;
+        cc.vy -= (dy/d) * 180;
         player.coins = Math.max(0, player.coins - 6);
       } else {
+        cc.contactCd = 0.9;
         // bump
         player.vx *= -0.55;
         player.vy *= -0.55;
@@ -2499,6 +2509,7 @@ if (ch.hunters) {
     // timers
     h.cd = Math.max(0, (h.cd||0) - dt);
     h.charge = Math.max(0, (h.charge||0) - dt);
+    h.backoff = Math.max(0, (h.backoff||0) - dt);
 
     // wander
     h.phase += dt * (0.55 + level*0.02) * h.drift;
@@ -2510,44 +2521,48 @@ if (ch.hunters) {
     const d = Math.hypot(dx, dy) || 1;
 
     // behavior
-    if (h.kind === 'chaser') {
-      if (d < 1100) {
-        const chase = 120 + level * 6;
+    if (h.backoff > 0 || player.spawnGrace > 0) {
+      const flee = 190;
+      vx -= (dx/d) * flee;
+      vy -= (dy/d) * flee;
+    } else if (h.kind === 'chaser') {
+      if (d < 760) {
+        const chase = 72 + level * 2.2;
         vx += (dx/d) * chase;
         vy += (dy/d) * chase;
       }
     } else if (h.kind === 'lurker') {
       // mostly idle; sudden close chase
-      if (d < 420) {
-        const chase = 150 + level * 4;
+      if (d < 300) {
+        const chase = 92 + level * 2.2;
         vx += (dx/d) * chase;
         vy += (dy/d) * chase;
       } else {
-        vx *= 0.25; vy *= 0.25;
+        vx *= 0.22; vy *= 0.22;
       }
     } else if (h.kind === 'leech') {
-      // orbit and try to touch tail
-      const desired = 240;
+      // orbit and try to touch tail, but without sticking to the player forever
+      const desired = 280;
       const ox = player.x + (-dy/d) * desired;
       const oy = player.y + ( dx/d) * desired;
       const lx = ox - h.x;
       const ly = oy - h.y;
       const ld = Math.hypot(lx, ly) || 1;
-      const sp = 120 + level*3;
+      const sp = 86 + level*1.8;
       vx += (lx/ld) * sp;
       vy += (ly/ld) * sp;
 
       // extra tail pressure
-      if (tail.points.length > 8 && d < desired + 70) {
-        // sample last tail points
-        const N = Math.min(26, tail.points.length);
+      if (tail.points.length > 8 && d < desired + 55) {
+        const N = Math.min(22, tail.points.length);
         for (let i=tail.points.length-1; i>=tail.points.length-N; i--){
           const p = tail.points[i];
           const td2 = dist2(p.x,p.y,h.x,h.y);
           const tr = 10;
           if (td2 < (h.r + tr) * (h.r + tr)) {
-            loseTailSegments(180);
-            player.nearMiss += dt * 1.2;
+            loseTailSegments(120);
+            h.backoff = 1.1;
+            player.nearMiss += dt * 0.7;
             break;
           }
         }
@@ -2555,19 +2570,19 @@ if (ch.hunters) {
     } else if (h.kind === 'charger') {
       if (h.charge > 0) {
         // charging burst
-        const sp = 520;
+        const sp = 360;
         vx = (h.dirx || (dx/d)) * sp;
         vy = (h.diry || (dy/d)) * sp;
-      } else if (d < 850 && h.cd <= 0) {
+      } else if (d < 620 && h.cd <= 0) {
         // start charge
         h.dirx = dx/d;
         h.diry = dy/d;
-        h.charge = 0.45;
-        h.cd = 2.2;
-        kickShake(6, 0.08);
-      } else if (d < 900) {
+        h.charge = 0.32;
+        h.cd = 3.0;
+        kickShake(4, 0.06);
+      } else if (d < 700) {
         // mild chase between charges
-        const chase = 90 + level*4;
+        const chase = 62 + level*2.0;
         vx += (dx/d) * chase;
         vy += (dy/d) * chase;
       }
@@ -2593,8 +2608,12 @@ if (ch.hunters) {
         if (player.coins % 40 === 0) player.hp = Math.min(6, player.hp + 1);
       } else if (player.r < h.r * 1.08) {
         damagePlayer();
+        h.backoff = 1.8;
+        h.vx -= (dx/d) * 240;
+        h.vy -= (dy/d) * 240;
         player.coins = Math.max(0, player.coins - 10);
       } else {
+        h.backoff = 1.0;
         player.vx *= -0.65;
         player.vy *= -0.65;
       }
