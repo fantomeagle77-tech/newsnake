@@ -1471,6 +1471,111 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     return c;
   }
 
+  function getMineWorldPos(m, lvl) {
+    const mx = m.x + Math.cos(m.phase || 0) * (10 + lvl * 0.2);
+    const my = m.y + Math.sin((m.phase || 0) * 1.1) * (10 + lvl * 0.2);
+    return { x: mx, y: my, r: m.r };
+  }
+
+  function sampleAiHazards(wx, wy, bodyR, lvl) {
+    const scanR = Math.max(220, bodyR * 4.2);
+    const cx0 = Math.floor((wx - scanR) / CHUNK);
+    const cx1 = Math.floor((wx + scanR) / CHUNK);
+    const cy0 = Math.floor((wy - scanR) / CHUNK);
+    const cy1 = Math.floor((wy + scanR) / CHUNK);
+
+    let ax = 0, ay = 0;
+    let blocked = 0;
+    let hitMine = false, hitVirus = false, hitMimic = false, inSlime = false;
+
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const ch = getChunk(cx, cy, lvl);
+
+        if (ch.mines) {
+          for (const m of ch.mines) {
+            const mp = getMineWorldPos(m, lvl);
+            const dx = wx - mp.x;
+            const dy = wy - mp.y;
+            const d2 = dx*dx + dy*dy;
+            const safe = bodyR + mp.r * 0.92 + 22;
+            if (d2 < safe * safe) {
+              const d = Math.sqrt(d2) || 1;
+              const k = 1 - d / safe;
+              ax += (dx / d) * (120 + 260 * k);
+              ay += (dy / d) * (120 + 260 * k);
+              blocked += k * 0.9;
+              if (d2 < (bodyR + mp.r * 0.78) ** 2) hitMine = true;
+            }
+          }
+        }
+
+        if (ch.viruses) {
+          for (const v of ch.viruses) {
+            if (collected.has(v.id)) continue;
+            const dx = wx - v.x;
+            const dy = wy - v.y;
+            const d2 = dx*dx + dy*dy;
+            const safe = bodyR + v.r * 0.88 + 18;
+            if (d2 < safe * safe) {
+              const d = Math.sqrt(d2) || 1;
+              const k = 1 - d / safe;
+              ax += (dx / d) * (90 + 180 * k);
+              ay += (dy / d) * (90 + 180 * k);
+              blocked += k * 0.65;
+              if (d2 < (bodyR + v.r * 0.72) ** 2) hitVirus = true;
+            }
+          }
+        }
+
+        if (ch.mimics) {
+          for (const mm of ch.mimics) {
+            if (collected.has(mm.id)) continue;
+            const dx = wx - mm.x;
+            const dy = wy - mm.y;
+            const d2 = dx*dx + dy*dy;
+            const safe = bodyR + mm.r * 0.92 + 18;
+            if (d2 < safe * safe) {
+              const d = Math.sqrt(d2) || 1;
+              const k = 1 - d / safe;
+              ax += (dx / d) * (80 + 140 * k);
+              ay += (dy / d) * (80 + 140 * k);
+              blocked += k * 0.55;
+              if (d2 < (bodyR + mm.r * 0.74) ** 2) hitMimic = true;
+            }
+          }
+        }
+
+        if (ch.slimes) {
+          for (const s of ch.slimes) {
+            const dx = wx - s.x;
+            const dy = wy - s.y;
+            const d2 = dx*dx + dy*dy;
+            const safe = bodyR + s.r * 0.88;
+            if (d2 < safe * safe) {
+              const d = Math.sqrt(d2) || 1;
+              const k = 1 - d / safe;
+              ax += (dx / d) * (40 + 80 * k);
+              ay += (dy / d) * (40 + 80 * k);
+              blocked += k * 0.22;
+              inSlime = true;
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      ax: clamp(ax, -260, 260),
+      ay: clamp(ay, -260, 260),
+      blocked,
+      hitMine,
+      hitVirus,
+      hitMimic,
+      inSlime,
+    };
+  }
+
   // ==========================
   // Player / Game state
   // ==========================
@@ -1529,7 +1634,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   const swarms = []; // list of drones {x,y,vx,vy,r,kind,hue,ttl}
   let swarmCd = 6.0;
 
-  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0, warmup:0, retreat:0, hitCd:0};
+  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0, warmup:0, retreat:0, hitCd:0, mineCd:0, stuckT:0};
 
 
   // ==========================
@@ -1556,6 +1661,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.warmup = 0;
     boss.retreat = 0;
     boss.hitCd = 0;
+    boss.mineCd = 0;
+    boss.stuckT = 0;
   }
 
   function resetTransientFX() {
@@ -1890,6 +1997,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.warmup = 1.8;
     boss.retreat = 0;
     boss.hitCd = 0;
+    boss.mineCd = 0;
+    boss.stuckT = 0;
     boss.active = true;
     kickShake(6, 0.10);
   }
@@ -1912,6 +2021,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.warmup = Math.max(0, boss.warmup - dt);
     boss.retreat = Math.max(0, boss.retreat - dt);
     boss.hitCd = Math.max(0, boss.hitCd - dt);
+    boss.mineCd = Math.max(0, boss.mineCd - dt);
 
     if (boss.ttl <= 0) {
       boss.active = false;
@@ -1938,16 +2048,49 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     if (boss.retreat > 0) sp *= 0.68;
     if (player.spawnGrace > 0) sp *= 0.08;
 
+    const avoid = sampleAiHazards(boss.x, boss.y, boss.r * 0.55, level);
+
     boss.phase += dt * (boss.warmup > 0 ? 0.66 : 0.88);
     const wx = Math.cos(boss.phase) * 16;
     const wy = Math.sin(boss.phase*1.1) * 16;
 
     const dirMul = (boss.retreat > 0 || player.spawnGrace > 0) ? -1 : 1;
-    boss.vx = boss.vx*0.90 + ((nx*dirMul)*sp + wx)*0.20;
-    boss.vy = boss.vy*0.90 + ((ny*dirMul)*sp + wy)*0.20;
+    const prevX = boss.x, prevY = boss.y;
+
+    boss.vx = boss.vx*0.90 + ((nx*dirMul)*sp + wx + avoid.ax*0.74)*0.20;
+    boss.vy = boss.vy*0.90 + ((ny*dirMul)*sp + wy + avoid.ay*0.74)*0.20;
+
+    if (avoid.inSlime) {
+      boss.vx *= 0.90;
+      boss.vy *= 0.90;
+    }
 
     boss.x += boss.vx * dt;
     boss.y += boss.vy * dt;
+
+    const moved = Math.hypot(boss.x - prevX, boss.y - prevY);
+    if (avoid.blocked > 0.52 && moved < 22 * dt) boss.stuckT += dt;
+    else boss.stuckT = Math.max(0, boss.stuckT - dt * 1.5);
+
+    if ((avoid.hitMine || avoid.hitVirus || avoid.hitMimic) && boss.mineCd <= 0) {
+      boss.mineCd = 1.25;
+      boss.retreat = Math.max(boss.retreat, 2.0);
+      boss.warmup = Math.max(boss.warmup, 0.75);
+      boss.phase += (Math.random() < 0.5 ? -1 : 1) * 0.9;
+      boss.vx -= nx * 180;
+      boss.vy -= ny * 180;
+      spawnBurst(boss.x, boss.y, 8, 12, 180);
+      kickShake(5, 0.08);
+    }
+
+    if (boss.stuckT > 2.8) {
+      boss.stuckT = 0;
+      boss.retreat = Math.max(boss.retreat, 2.2);
+      boss.warmup = Math.max(boss.warmup, 0.9);
+      boss.phase += Math.PI * 0.65;
+      boss.vx += (-ny) * 220;
+      boss.vy += ( nx) * 220;
+    }
 
     if (d < 1350) {
       player.nearMiss += dt * 0.7;
@@ -2285,7 +2428,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
             if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
               collected.add(ss.id);
               player.shieldHits = 1;
-              player.shieldTime = 16.0;
+              player.shieldTime = 8.0;
               player.score += 40;
               spawnBurst(ss.x, ss.y, 220, 14, 200);
             }
@@ -2371,6 +2514,8 @@ if (ch.cells) {
   for (const cc of ch.cells) {
     if (collected.has(cc.id)) continue;
 
+    const prevX = cc.x, prevY = cc.y;
+
     // wander
     cc.phase += dt * (0.65 + level*0.02) * cc.drift;
     const baseSp = (cc.kind === 'runner') ? 80 : (cc.kind === 'bully' ? 55 : 45);
@@ -2382,9 +2527,11 @@ if (ch.cells) {
     const d = Math.hypot(dx, dy) || 1;
 
     cc.contactCd = Math.max(0, (cc.contactCd || 0) - dt);
+    cc.stuckT = Math.max(0, (cc.stuckT || 0) - dt * 0.35);
 
     const youBigger = player.r > cc.r * 1.12;
     const youSmaller = player.r < cc.r * 0.92;
+    const avoid = sampleAiHazards(cc.x, cc.y, cc.r * 0.95, level);
 
     // behavior near player
     if (d < 560) {
@@ -2401,15 +2548,41 @@ if (ch.cells) {
       }
     }
 
+    // hazards / obstacles
+    vx += avoid.ax * 0.95;
+    vy += avoid.ay * 0.95;
+    if (avoid.inSlime) {
+      vx *= 0.86;
+      vy *= 0.86;
+    }
+
     // integrate (smooth)
     cc.vx = cc.vx * 0.84 + vx * 0.32;
     cc.vy = cc.vy * 0.84 + vy * 0.32;
     cc.x += cc.vx * dt;
     cc.y += cc.vy * dt;
 
+    const moved = Math.hypot(cc.x - prevX, cc.y - prevY);
+    if (avoid.blocked > 0.48 && moved < 20 * dt && d < 620) cc.stuckT += dt;
+    else cc.stuckT = Math.max(0, cc.stuckT - dt * 1.6);
+
+    if (avoid.hitMine || avoid.hitVirus || avoid.hitMimic) {
+      collected.add(cc.id);
+      spawnBurst(cc.x, cc.y, cc.hue, 10, 180);
+      continue;
+    }
+    if (cc.stuckT > 2.8) {
+      collected.add(cc.id);
+      spawnBurst(cc.x, cc.y, cc.hue, 8, 160);
+      continue;
+    }
+
     // collisions: bigger eats smaller
+    const pdx = player.x - cc.x;
+    const pdy = player.y - cc.y;
+    const pd = Math.hypot(pdx, pdy) || 1;
     const rr = player.r + cc.r;
-    if (player.invulnTime <= 0 && d < rr) {
+    if (player.invulnTime <= 0 && pd < rr) {
       if (player.r > cc.r * 1.12) {
         collected.add(cc.id);
         const gain = Math.max(2, Math.floor(cc.r / 10));
@@ -2420,8 +2593,8 @@ if (ch.cells) {
       } else if (player.r < cc.r * 0.92) {
         damagePlayer();
         cc.contactCd = 1.4;
-        cc.vx -= (dx/d) * 180;
-        cc.vy -= (dy/d) * 180;
+        cc.vx -= (pdx/pd) * 180;
+        cc.vy -= (pdy/pd) * 180;
         player.coins = Math.max(0, player.coins - 6);
       } else {
         cc.contactCd = 0.9;
@@ -2506,10 +2679,13 @@ if (ch.hunters) {
   for (const h of ch.hunters) {
     if (collected.has(h.id)) continue;
 
+    const prevX = h.x, prevY = h.y;
+
     // timers
     h.cd = Math.max(0, (h.cd||0) - dt);
     h.charge = Math.max(0, (h.charge||0) - dt);
     h.backoff = Math.max(0, (h.backoff||0) - dt);
+    h.stuckT = Math.max(0, (h.stuckT||0) - dt * 0.30);
 
     // wander
     h.phase += dt * (0.55 + level*0.02) * h.drift;
@@ -2519,6 +2695,8 @@ if (ch.hunters) {
     const dx = player.x - h.x;
     const dy = player.y - h.y;
     const d = Math.hypot(dx, dy) || 1;
+    const charging = h.charge > 0;
+    const avoid = sampleAiHazards(h.x, h.y, h.r * 0.98, level);
 
     // behavior
     if (h.backoff > 0 || player.spawnGrace > 0) {
@@ -2588,16 +2766,54 @@ if (ch.hunters) {
       }
     }
 
+    // hazards / obstacles
+    const avoidMul = charging ? 0.65 : 1.08;
+    vx += avoid.ax * avoidMul;
+    vy += avoid.ay * avoidMul;
+    if (avoid.inSlime) {
+      vx *= 0.82;
+      vy *= 0.82;
+    }
+
     // move
+    h.vx = vx;
+    h.vy = vy;
     h.x += vx * dt;
     h.y += vy * dt;
+
+    const moved = Math.hypot(h.x - prevX, h.y - prevY);
+    if (avoid.blocked > 0.52 && moved < 24 * dt && d < 860) h.stuckT += dt;
+    else h.stuckT = Math.max(0, h.stuckT - dt * 1.5);
+
+    if (avoid.hitMine || avoid.hitVirus || avoid.hitMimic) {
+      if (h.kind === 'charger' || h.r < 46) {
+        collected.add(h.id);
+        spawnBurst(h.x, h.y, h.hue || 20, 14, 220);
+        continue;
+      } else {
+        h.backoff = Math.max(h.backoff, 2.0);
+        h.cd = Math.max(h.cd, 1.0);
+        h.charge = 0;
+        h.phase += (Math.random() < 0.5 ? -1 : 1) * 0.8;
+        spawnBurst(h.x, h.y, h.hue || 20, 10, 180);
+      }
+    }
+
+    if (h.stuckT > 3.2) {
+      collected.add(h.id);
+      spawnBurst(h.x, h.y, h.hue || 20, 12, 190);
+      continue;
+    }
 
     // adrenaline when close
     if (d < (player.r + h.r + 140)) player.nearMiss += dt * 0.9;
 
     // collision rules: bigger eats smaller
+    const pdx = player.x - h.x;
+    const pdy = player.y - h.y;
+    const pd = Math.hypot(pdx, pdy) || 1;
     const rr = player.r + h.r;
-    if (player.invulnTime <= 0 && d < rr) {
+    if (player.invulnTime <= 0 && pd < rr) {
       if (player.r > h.r * 1.15) {
         collected.add(h.id);
         const gain = Math.max(8, Math.floor(h.r / 7));
@@ -2609,8 +2825,8 @@ if (ch.hunters) {
       } else if (player.r < h.r * 1.08) {
         damagePlayer();
         h.backoff = 1.8;
-        h.vx -= (dx/d) * 240;
-        h.vy -= (dy/d) * 240;
+        h.vx = (h.vx || 0) - (pdx/pd) * 240;
+        h.vy = (h.vy || 0) - (pdy/pd) * 240;
         player.coins = Math.max(0, player.coins - 10);
       } else {
         h.backoff = 1.0;
