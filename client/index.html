@@ -528,6 +528,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     onlineCount: 1,
     reconnectTimer: null,
     joinSent: false,
+    heartbeatAcc: 0,
+    roster: [],
   };
 
   // ==========================
@@ -591,15 +593,20 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }
 
   function netRenderMiniList() {
-    if (netCountEl) netCountEl.textContent = String(1 + NET.players.size);
+    const count = NET.onlineCount || 1;
+    if (netCountEl) netCountEl.textContent = String(count);
     if (netRoomLabelEl) netRoomLabelEl.textContent = `room ${NET.room}`;
 
     if (!netPlayersListEl) return;
-    const rows = [];
-    rows.push(`🟢 ты: ${String(ONLINE.name || 'anon').slice(0,18)}`);
 
-    for (const p of NET.players.values()) {
-      rows.push(`⚪ ${String(p.name || 'anon').slice(0,18)}`);
+    const rows = [];
+    const roster = Array.isArray(NET.roster) && NET.roster.length
+      ? NET.roster
+      : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }];
+
+    for (const item of roster) {
+      const self = item.self || item.id === NET.id;
+      rows.push(`${self ? '🟢' : '⚪'} ${self ? 'ты' : String(item.name || 'anon').slice(0,18)}${self ? `: ${String(ONLINE.name || item.name || 'anon').slice(0,18)}` : ''}`);
     }
 
     netPlayersListEl.innerHTML = rows.join('<br>');
@@ -658,6 +665,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         NET.id = msg.id;
         NET.color = msg.color || NET.color;
         NET.spawn = msg.spawn || { x: 0, y: 0 };
+        NET.roster = [{ id: NET.id, name: ONLINE.name || 'anon', self: true }];
+        NET.onlineCount = 1;
+        netRenderMiniList();
         return;
       }
 
@@ -671,7 +681,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
           }
         }
 
-        NET.onlineCount = 1 + NET.players.size;
+        NET.onlineCount = Number(msg.count) || (1 + NET.players.size);
+        NET.roster = Array.isArray(msg.roster)
+          ? msg.roster.map(p => ({ ...p, self: p.id === NET.id }))
+          : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }, ...Array.from(NET.players.values()).map(p => ({ id: p.id, name: p.name }))];
+
         netRenderMiniList();
       }
     };
@@ -681,6 +695,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       NET.joinSent = false;
       NET.players.clear();
       NET.onlineCount = 1;
+      NET.roster = [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }];
       netRenderMiniList();
 
       clearTimeout(NET.reconnectTimer);
@@ -690,6 +705,22 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     };
 
     ws.onerror = () => {};
+  }
+
+  function netHeartbeatTick(dt) {
+    if (!NET_ENABLED) return;
+    if (!NET.connected) return;
+
+    NET.heartbeatAcc += dt;
+    if (NET.heartbeatAcc < 2.0) return;
+    NET.heartbeatAcc = 0;
+
+    netSend({
+      type: 'ping',
+      room: NET.room,
+      name: ONLINE.name || 'anon',
+      alive: state === 'RUN',
+    });
   }
 
   function netTick(dt) {
@@ -1726,6 +1757,8 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   function loop(ts) {
     const dt = Math.min(0.033, (ts - lastTs) / 1000);
     lastTs = ts;
+
+    netHeartbeatTick(dt);
     tickCounter++;
 
     if (state === 'RUN') {
