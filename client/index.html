@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Void Run Prototype</title>
+  <title>Void Run — online survival arena</title>
+  <meta name="description" content="Void Run — тёмная онлайн survival arena с ростом шара, минами, реликвиями и экстракцией." />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:title" content="Void Run — online survival arena" />
+  <meta property="og:description" content="Grow, hunt, survive, extract." />
   <style>
     html, body { margin:0; padding:0; height:100%; background:#070A12; overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #wrap { position:fixed; inset:0; display:block; }
@@ -89,11 +93,14 @@
       <div class="pill"><span>🗿</span> <b id="relics">0/3</b></div>
       <div class="pill"><span>🚪</span> <b id="extract">—</b></div>
     <div class="pill"><span>❤️</span> <b id="hp">3</b></div>
+    <div class="pill"><span>🛡️</span> <b id="shield">0</b></div>
     <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
     <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
+	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
+	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
     <div class="spacer"></div>
     <button class="btn" id="pause">Пауза</button>
     <button class="btn" id="restart">Заново</button>
@@ -120,6 +127,9 @@
   <div id="netRoomLabel" style="font-size:12px; opacity:.72; margin-top:4px;">room daily</div>
   <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
     ты один
+  </div>
+  <div style="display:flex; gap:8px; margin-top:10px;">
+    <button class="btn" id="netRenameBtn" style="padding:8px 12px; font-size:12px;">Ник</button>
   </div>
 </div>
 
@@ -190,6 +200,31 @@
     <div style="display:flex; gap:10px; margin-top:14px;">
       <button class="btn" id="nickGateOk" style="flex:1;">Войти</button>
       <button class="btn" id="nickGateRand" style="padding:0 18px;">🎲</button>
+    </div>
+  </div>
+</div>
+
+<div id="supportModal" style="
+  position:fixed; inset:0; z-index:10015;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.68); backdrop-filter: blur(8px);
+">
+  <div style="
+    width:min(92vw,440px);
+    border-radius:24px;
+    padding:22px;
+    background:rgba(8,12,24,.94);
+    border:1px solid rgba(90,140,255,.18);
+    box-shadow:0 20px 80px rgba(0,0,0,.45);
+    color:#EAF1FF;
+  ">
+    <div style="font-size:26px; font-weight:900; margin-bottom:8px;">Поддержать Void Run</div>
+    <div id="supportSubtitle" style="opacity:.84; line-height:1.45; margin-bottom:14px;">
+      Founder Pack и донат уже подготовлены в интерфейсе. Вставь свои реальные ссылки в SUPPORT_LINKS.
+    </div>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn" id="supportGo" style="flex:1;">Открыть</button>
+      <button class="btn" id="supportClose" style="padding:0 18px;">Закрыть</button>
     </div>
   </div>
 </div>
@@ -411,7 +446,10 @@
   const elCoins = document.getElementById('coins');
   const elMass = document.getElementById('mass');
   const elScore = document.getElementById('score');
+  const elRelics = document.getElementById('relics');
+  const elExtract = document.getElementById('extract');
   const elHP = document.getElementById('hp');
+  const elShield = document.getElementById('shield');
   const elLv = document.getElementById('lv');
   const elBest = document.getElementById('best');
   const btnRestart = document.getElementById('restart');
@@ -436,6 +474,12 @@
   const netRoomLabelEl = document.getElementById('netRoomLabel');
   const netPlayersListEl = document.getElementById('netPlayersList');
 const netRenameBtnEl = document.getElementById('netRenameBtn');
+  const supportModalEl = document.getElementById('supportModal');
+  const supportSubtitleEl = document.getElementById('supportSubtitle');
+  const supportGoEl = document.getElementById('supportGo');
+  const supportCloseEl = document.getElementById('supportClose');
+  const btnFounder = document.getElementById('btnFounder');
+  const btnDonate = document.getElementById('btnDonate');
 
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
@@ -516,6 +560,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const NET_ENABLED = new URLSearchParams(location.search).get('net') !== '0';
   const NET_ROOM = (new URLSearchParams(location.search).get('room') || 'daily').trim().slice(0, 24) || 'daily';
 
+  const SUPPORT_LINKS = {
+    founder: localStorage.getItem('voidrun_founder_url') || '',
+    donate: localStorage.getItem('voidrun_donate_url') || ''
+  };
+
   const NET = {
     ws: null,
     connected: false,
@@ -591,6 +640,35 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     onlineSetName(v);
     closeNickGate();
   }
+  function openSupport(kind='founder') {
+    if (!supportModalEl) return;
+    const url = kind === 'donate' ? SUPPORT_LINKS.donate : SUPPORT_LINKS.founder;
+    if (supportSubtitleEl) {
+      supportSubtitleEl.textContent = kind === 'donate'
+        ? 'Кнопка доната готова. Вставь свою реальную ссылку в SUPPORT_LINKS.donate.'
+        : 'Founder Pack готов. Вставь свою реальную ссылку в SUPPORT_LINKS.founder.';
+    }
+    supportModalEl.dataset.kind = kind;
+    supportModalEl.style.display = 'flex';
+    if (supportGoEl) supportGoEl.textContent = url ? 'Открыть ссылку' : 'Ссылка не задана';
+  }
+
+  function closeSupport() {
+    if (supportModalEl) supportModalEl.style.display = 'none';
+  }
+
+  function goSupport() {
+    const kind = supportModalEl?.dataset.kind === 'donate' ? 'donate' : 'founder';
+    const url = kind === 'donate' ? SUPPORT_LINKS.donate : SUPPORT_LINKS.founder;
+    if (!url) {
+      alert(kind === 'donate'
+        ? 'Вставь свою ссылку в SUPPORT_LINKS.donate'
+        : 'Вставь свою ссылку в SUPPORT_LINKS.founder');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
 
   function netRenderMiniList() {
     const count = NET.onlineCount || 1;
@@ -676,7 +754,29 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
         if (Array.isArray(msg.players)) {
           for (const p of msg.players) {
-            if (!p || p.id === NET.id) continue;
+            if (!p) continue;
+
+            if (p.id === NET.id) {
+              player.hp = Number.isFinite(p.hp) ? p.hp : player.hp;
+              player.r = Number.isFinite(p.r) ? p.r : player.r;
+              player.score = Number.isFinite(p.score) ? p.score : player.score;
+
+              if (msg.selfSpawn && NET.awaitingRespawn) {
+                NET.spawn = msg.selfSpawn;
+              }
+
+              if (p.alive === false && state === 'RUN') {
+                state = 'DEAD';
+                overlay.style.display = 'flex';
+                overlay.querySelector('h2').textContent = 'Тебя схавали ☠️';
+                overlay.querySelectorAll('p')[0].innerHTML = `Счёт: <b>${player.score|0}</b> • Монеты: <b>${player.coins}</b>`;
+                overlay.querySelectorAll('p')[1].innerHTML = `Нажми <b>Старт</b>, чтобы быстро респавниться в новой точке.`;
+                overlay.querySelectorAll('p')[2].innerHTML = `Сервер теперь решает PvP: кто кого съел.`;
+                overlay.querySelector('#start').textContent = 'Респавн';
+              }
+              continue;
+            }
+
             NET.players.set(p.id, p);
           }
         }
@@ -687,6 +787,34 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
           : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }, ...Array.from(NET.players.values()).map(p => ({ id: p.id, name: p.name }))];
 
         netRenderMiniList();
+        updateHUD();
+        return;
+      }
+
+      if (msg.type === 'respawned') {
+        NET.spawn = msg.spawn || NET.spawn || { x: 0, y: 0 };
+        NET.awaitingRespawn = false;
+        overlay.style.display = 'none';
+        state = 'RUN';
+        resetGame();
+        return;
+      }
+
+      if (msg.type === 'pvp') {
+        if (msg.role === 'victim') {
+          state = 'DEAD';
+          overlay.style.display = 'flex';
+          overlay.querySelector('h2').textContent = 'Тебя схавали ☠️';
+          overlay.querySelectorAll('p')[0].innerHTML = `Тебя съел: <b>${String(msg.killerName || 'игрок').slice(0,18)}</b>`;
+          overlay.querySelectorAll('p')[1].innerHTML = `Нажми <b>Старт</b>, чтобы сразу респавниться в новой точке.`;
+          overlay.querySelectorAll('p')[2].innerHTML = `Респавн идёт от сервера.`;
+          overlay.querySelector('#start').textContent = 'Респавн';
+        } else if (msg.role === 'attacker') {
+          player.r = msg.r ?? player.r;
+          player.score = msg.score ?? player.score;
+          updateHUD();
+        }
+        return;
       }
     };
 
@@ -966,6 +1094,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     }
 
     if (netRenameBtnEl) netRenameBtnEl.onclick = () => openNickGate(true);
+    if (btnFounder) btnFounder.onclick = () => openSupport('founder');
+    if (btnDonate) btnDonate.onclick = () => openSupport('donate');
+    if (supportGoEl) supportGoEl.onclick = () => goSupport();
+    if (supportCloseEl) supportCloseEl.onclick = () => closeSupport();
+    if (supportModalEl) supportModalEl.addEventListener('click', (e) => { if (e.target === supportModalEl) closeSupport(); });
 
     if (nickGateOkEl) nickGateOkEl.onclick = () => applyNickFromGate();
     if (nickGateInputEl) {
@@ -1172,6 +1305,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const coins = [];
     const mines = [];
     const torches = [];
+    const heals = [];
+    const shields = [];
     const mimics = [];
     const viruses = [];
     const cells = [];
@@ -1228,6 +1363,22 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const y = baseY + rnd()*CHUNK;
       const id = key + ':t:0';
       torches.push({x,y,r:14,id});
+    }
+
+    // heal orb
+    const healP = (biome === 'ice') ? 0.26 : (biome === 'nebula' ? 0.18 : 0.14);
+    if (level >= 2 && rnd() < healP) {
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      heals.push({x,y,r:13,id:key + ':heal:0',phase:rnd()*TAU});
+    }
+
+    // shield orb
+    const shieldP = (biome === 'nebula') ? 0.16 : (biome === 'ice' ? 0.12 : 0.09);
+    if (level >= 3 && rnd() < shieldP) {
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      shields.push({x,y,r:13,id:key + ':shield:0',phase:rnd()*TAU});
     }
 
     // mimic coin (trap)
@@ -1310,7 +1461,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       relics.push({ id: key + ':rel:0', x, y, r, type });
     }
 
-c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slimes, t: tickCounter};
+c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cells, hunters, slimes, t: tickCounter};
     chunkMap.set(key, c);
 
     if (chunkMap.size > MAX_CHUNKS_KEEP) {
@@ -1331,6 +1482,9 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     baseR: 18,
     r: 18,
     hp: 3,
+    maxHp: 3,
+    shieldHits: 0,
+    shieldTime: 0,
     coins: 0,
     nearMiss: 0,
     dash: 0,
@@ -1389,6 +1543,31 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     shakeA = Math.max(shakeA, a);
     shakeT = Math.max(shakeT, t);
   }
+  function resetBossAndSwarms() {
+    swarms.length = 0;
+    swarmCd = 6.0;
+    boss.active = false;
+    boss.x = 0; boss.y = 0;
+    boss.vx = 0; boss.vy = 0;
+    boss.ttl = 0;
+    boss.cd = 18.0;
+    boss.phase = 0;
+  }
+
+  function resetTransientFX() {
+    fx.length = 0;
+    pellets.length = 0;
+    shakeT = 0;
+    shakeA = 0;
+  }
+
+  function localRandomSpawn() {
+    return {
+      x: Math.round((Math.random() - 0.5) * 1200),
+      y: Math.round((Math.random() - 0.5) * 1200),
+    };
+  }
+
 
   function spawnBurst(wx, wy, hue, count=14, baseSpeed=220) {
     for (let i=0;i<count;i++){
@@ -1459,10 +1638,12 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
 	AudioFX.click();
   }
   function resetGame() {
-    const netSpawn = (NET_ENABLED && NET.spawn) ? NET.spawn : { x: 0, y: 0 };
-    player.x = netSpawn.x; player.y = netSpawn.y;
+    const spawn = (NET_ENABLED && NET.spawn) ? NET.spawn : localRandomSpawn();
+    player.x = spawn.x; player.y = spawn.y;
     player.vx = 0; player.vy = 0;
-    player.hp = 3;
+    player.hp = player.maxHp = 3;
+    player.shieldHits = 0;
+    player.shieldTime = 0;
     player.coins = 0;
     player.nearMiss = 0;
     player.baseR = 18;
@@ -1472,8 +1653,7 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     player.combo = 0;
     player.comboTimer = 0;
     player.torchTime = 0;
-    player.invulnTime = 0;
-
+    player.invulnTime = 1.1;
 
     player.relics = [];
     player.mods = { beam:0, aura:0, magnet:0, echo:0, antiSlow:0 };
@@ -1493,8 +1673,13 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     dashReady = true;
     dashCd = 0;
 
-    // place pointer in center if not moved
+    resetBossAndSwarms();
+    resetTransientFX();
+
     if (!hasPointer) { mouseX = (W/DPR/2)*DPR; mouseY = (H/DPR/2)*DPR; }
+
+    cam.x = player.x;
+    cam.y = player.y;
 
     onlineGhostReset();
     updateHUD();
@@ -1503,6 +1688,10 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   btnRestart.addEventListener('click', ()=>{
     overlay.style.display = 'none';
     state = 'RUN';
+    if (NET_ENABLED) {
+      NET.awaitingRespawn = true;
+      netSend({ type:'respawn', room: NET.room, name: ONLINE.name || 'anon' });
+    }
     resetGame();
   });
   btnPause.addEventListener('click', ()=>{
@@ -1511,13 +1700,16 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
 
 
   btnStart.addEventListener('click', ()=>{
-    // If we are paused -> resume, do NOT reset.
     if (state === 'PAUSE') {
       togglePause();
       return;
     }
     overlay.style.display = 'none';
     state = 'RUN';
+    if (NET_ENABLED) {
+      NET.awaitingRespawn = true;
+      netSend({ type:'respawn', room: NET.room, name: ONLINE.name || 'anon' });
+    }
     resetGame();
   });
 
@@ -1550,9 +1742,16 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     elT.textContent = timeSurv.toFixed(1) + 's';
     elCoins.textContent = player.coins;
     elHP.textContent = player.hp;
+    if (elShield) elShield.textContent = player.shieldHits > 0 ? `${player.shieldHits}` : '0';
     elLv.textContent = level;
     elScore.textContent = player.score | 0;
     elMass.textContent = (player.r / player.baseR).toFixed(2) + 'x';
+    if (elRelics) elRelics.textContent = `${player.relics.length}/${RELIC_GOAL}`;
+    if (elExtract) {
+      if (player.extracted) elExtract.textContent = 'DONE';
+      else if (portal) elExtract.textContent = 'GO';
+      else elExtract.textContent = '—';
+    }
   }
 
   
@@ -1745,6 +1944,9 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
         // brutal hit
         player.invulnTime = 0;
         player.hp = 1;
+        boss.active = false;
+        boss.ttl = 0;
+        boss.cd = 12.0;
         damagePlayer();
       }
     }
@@ -2018,29 +2220,57 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
 
 		// torches (visibility boost)
 		if (ch.torches) {
-
-      // relics
-      if (ch.relics) {
-        for (const rr of ch.relics) {
-          if (collected.has(rr.id)) continue;
-          const grabR = player.r + rr.r + 10;
-          if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
-            collected.add(rr.id);
-            applyRelic(rr.type);
-          }
-        }
-      }
-
 		  for (const t of ch.torches) {
 			if (collected.has(t.id)) continue;
 			const rr = player.r + t.r + 8;
 			if (dist2(player.x, player.y, t.x, t.y) < rr*rr) {
 			  collected.add(t.id);
-			  player.torchTime = 7.0; // секунд полной видимости
+			  player.torchTime = 7.0;
 			  AudioFX.power();
 			}
 		  }
 		}
+
+        // heal orbs
+        if (ch.heals) {
+          for (const hh of ch.heals) {
+            if (collected.has(hh.id)) continue;
+            const rr = player.r + hh.r + 8;
+            if (dist2(player.x, player.y, hh.x, hh.y) < rr*rr) {
+              collected.add(hh.id);
+              player.hp = Math.min(player.maxHp, player.hp + 1);
+              player.score += 30;
+              spawnBurst(hh.x, hh.y, 150, 12, 180);
+            }
+          }
+        }
+
+        // shield orbs
+        if (ch.shields) {
+          for (const ss of ch.shields) {
+            if (collected.has(ss.id)) continue;
+            const rr = player.r + ss.r + 8;
+            if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
+              collected.add(ss.id);
+              player.shieldHits = 1;
+              player.shieldTime = 8.0;
+              player.score += 40;
+              spawnBurst(ss.x, ss.y, 220, 14, 200);
+            }
+          }
+        }
+
+        // relics
+        if (ch.relics) {
+          for (const rr of ch.relics) {
+            if (collected.has(rr.id)) continue;
+            const grabR = player.r + rr.r + 10;
+            if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
+              collected.add(rr.id);
+              applyRelic(rr.type);
+            }
+          }
+        }
 
         // mines
         for (const m of ch.mines) {
@@ -2378,24 +2608,36 @@ if (ch.hunters) {
   function damagePlayer() {
 	AudioFX.hit();
     if (player.invulnTime > 0) return;
+
+    if (player.shieldHits > 0) {
+      player.shieldHits = Math.max(0, player.shieldHits - 1);
+      player.shieldTime = 0;
+      player.invulnTime = 1.25;
+      kickShake(7, 0.10);
+      spawnBurst(player.x, player.y, 210, 14, 220);
+      updateHUD();
+      return;
+    }
+
     player.hp--;
-    player.invulnTime = 1.15; // i-frames (so mines don't insta-delete you)
-    // knockback opposite velocity
+    player.invulnTime = 1.35;
     player.vx *= -0.55;
     player.vy *= -0.55;
-    // also lose some tail
-    loseTailSegments(260);
+    loseTailSegments(220);
     kickShake(10, 0.18);
     spawnBurst(player.x, player.y, 350, 18, 260);
 
     if (player.hp <= 0) {
+      if (NET_ENABLED && NET.suppressNextOverlay) {
+        NET.suppressNextOverlay = false;
+        overlay.style.display = 'none';
+        state = 'RUN';
+        return;
+      }
+
       state = 'DEAD';
 	  AudioFX.dead();
 
-		// отправка результата в онлайн
-      // отправка результата в онлайн
-      onlineSubmitResult();
-// submit score + ghost to online leaderboard
       onlineSubmitResult();
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
       if (timeSurv > bestNow) {
@@ -2591,6 +2833,24 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
 
       if (ch.torches) {
 
+      if (ch.heals) {
+        for (const hh of ch.heals) {
+          if (collected.has(hh.id)) continue;
+          const x = sx(hh.x), y = sy(hh.y);
+          if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
+          drawHealOrb(x,y,hh.r,hh.phase);
+        }
+      }
+
+      if (ch.shields) {
+        for (const ss of ch.shields) {
+          if (collected.has(ss.id)) continue;
+          const x = sx(ss.x), y = sy(ss.y);
+          if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
+          drawShieldOrb(x,y,ss.r,ss.phase);
+        }
+      }
+
       // relics
       if (ch.relics) {
         for (const rr of ch.relics) {
@@ -2681,6 +2941,19 @@ if (ch.hunters) {
 
   // player (world)
   drawPlayer(sx(player.x), sy(player.y), player.r);
+  if (player.shieldHits > 0) {
+    ctx.save();
+    const pxs = sx(player.x), pys = sy(player.y);
+    const rg = ctx.createRadialGradient(pxs, pys, player.r*0.3, pxs, pys, player.r*2.2);
+    rg.addColorStop(0, 'rgba(110,170,255,0.10)');
+    rg.addColorStop(1, 'rgba(110,170,255,0)');
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(pxs, pys, player.r*2.2, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,190,255,0.92)';
+    ctx.lineWidth = 4 * DPR;
+    ctx.beginPath(); ctx.arc(pxs, pys, player.r * 1.26, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
   drawSelfNick();
 
   if (state === 'RUN') drawTarget(mouseX, mouseY);
