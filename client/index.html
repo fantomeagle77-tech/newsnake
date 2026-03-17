@@ -99,9 +99,28 @@
     <button class="btn" id="restart">Заново</button>
   </div>
 
-    <div class="hint">
+  <div class="hint">
       <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
       <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+    </div>
+
+    <div id="netMini" style="
+      position:fixed; left:16px; top:86px; z-index:9998;
+      min-width:180px; max-width:240px;
+      padding:10px 12px;
+      border-radius:16px;
+      background:rgba(10,14,28,.52);
+      border:1px solid rgba(90,140,255,.15);
+      color:#EAF1FF;
+      backdrop-filter: blur(12px);
+      box-shadow:0 12px 40px rgba(0,0,0,.30);
+      display:none;
+    ">
+      <div style="font-weight:800;">🌐 Онлайн: <span id="netCount">1</span></div>
+      <div id="netRoomLabel" style="font-size:12px; opacity:.72; margin-top:4px;">room daily</div>
+      <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
+        ты один
+      </div>
     </div>
 
     <div id="onlinePanel" style="
@@ -139,8 +158,44 @@
         Отправка результата — автоматически при поражении.
       </div>
     </div>
-</div>
-  </div>
+
+    <div id="nickGate" style="
+      position:fixed; inset:0; z-index:10020;
+      display:none; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.72); backdrop-filter: blur(8px);
+    ">
+      <div style="
+        width:min(92vw,420px);
+        border-radius:24px;
+        padding:22px;
+        background:rgba(8,12,24,.92);
+        border:1px solid rgba(90,140,255,.18);
+        box-shadow:0 20px 80px rgba(0,0,0,.45);
+        color:#EAF1FF;
+      ">
+        <div style="font-size:28px; font-weight:900; margin-bottom:10px;">
+          Вход в арену
+        </div>
+
+        <div style="opacity:.82; line-height:1.45; margin-bottom:14px;">
+          Введи ник. Его увидят другие игроки в комнате.
+        </div>
+
+        <input id="nickGateInput" maxlength="18" placeholder="Твой ник" style="
+          width:100%; box-sizing:border-box;
+          padding:14px 16px;
+          border-radius:14px;
+          border:1px solid rgba(255,255,255,.14);
+          background:rgba(0,0,0,.28);
+          color:#fff; outline:none; font-size:18px;
+        " />
+
+        <div style="display:flex; gap:10px; margin-top:14px;">
+          <button class="btn" id="nickGateOk" style="flex:1;">Играть</button>
+          <button class="btn" id="nickGateRand" style="padding:0 18px;">🎲</button>
+        </div>
+      </div>
+    </div>
 
   <div class="centerMsg" id="overlay">
     <div class="box">
@@ -173,10 +228,7 @@
     let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.20');
 
     let musicTimer = null;
-    let musicPulseTimer = null;
     let musicPhase = 0;
-    let musicDayKey = 0;
-    let musicProfile = null;
 
     function ensure() {
       if (ctx) return;
@@ -229,259 +281,46 @@
 
     function stopMusic() {
       if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
-      if (musicPulseTimer) { clearTimeout(musicPulseTimer); musicPulseTimer = null; }
     }
 
-	function makeDailyMusicProfile() {
-      const day = dailySeedUTC() >>> 0;
-      const presets = [
-        {
-          name: 'void',
-          root: 82.41,
-          scale: [0, 3, 7, 10],
-          lp: 420,
-          stepMin: 2200,
-          stepMax: 3600,
-          oscA: 'sine',
-          oscB: 'triangle',
-          spread: 6
-        },
-        {
-          name: 'nebula',
-          root: 98.00,
-          scale: [0, 2, 5, 9],
-          lp: 620,
-          stepMin: 1800,
-          stepMax: 3100,
-          oscA: 'triangle',
-          oscB: 'sine',
-          spread: 8
-        },
-        {
-          name: 'ice',
-          root: 110.00,
-          scale: [0, 5, 7, 12],
-          lp: 760,
-          stepMin: 2100,
-          stepMax: 3400,
-          oscA: 'sine',
-          oscB: 'sine',
-          spread: 4
-        },
-        {
-          name: 'toxic',
-          root: 87.31,
-          scale: [0, 3, 6, 10],
-          lp: 520,
-          stepMin: 1700,
-          stepMax: 2900,
-          oscA: 'triangle',
-          oscB: 'square',
-          spread: 6
-        },
-        {
-          name: 'lava',
-          root: 73.42,
-          scale: [0, 1, 5, 8],
-          lp: 360,
-          stepMin: 1500,
-          stepMax: 2400,
-          oscA: 'triangle',
-          oscB: 'triangle',
-          spread: 10
-        }
-      ];
-
-      const preset = presets[day % presets.length];
-      return { day, ...preset };
-    }
-
-    function musicVoice(freq, start, dur, vol, type='sine', lp=700, detune=0) {
-      if (!ctx || !musGain) return;
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const f = ctx.createBiquadFilter();
-
-      o.type = type;
-      o.frequency.setValueAtTime(freq, start);
-      o.detune.setValueAtTime(detune, start);
-
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(lp, start);
-      f.Q.setValueAtTime(0.8, start);
-
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), start + 0.9);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * 0.45), start + Math.max(1.6, dur * 0.55));
-      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-
-      o.connect(f);
-      f.connect(g);
-      g.connect(musGain);
-
-      o.start(start);
-      o.stop(start + dur + 0.08);
-    }
-
-	function musicKick(start, baseFreq = 48, vol = 0.9) {
-      if (!ctx || !musGain) return;
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const f = ctx.createBiquadFilter();
-
-      o.type = 'sine';
-      o.frequency.setValueAtTime(baseFreq * 1.9, start);
-      o.frequency.exponentialRampToValueAtTime(baseFreq, start + 0.09);
-      o.frequency.exponentialRampToValueAtTime(Math.max(28, baseFreq * 0.72), start + 0.22);
-
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(140, start);
-      f.Q.setValueAtTime(1.2, start);
-
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.16 * vol, start + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.26);
-
-      o.connect(f);
-      f.connect(g);
-      g.connect(musGain);
-
-      o.start(start);
-      o.stop(start + 0.30);
-    }
-
-    function musicSubPulse(start, freq = 42, dur = 1.6, vol = 0.7) {
-      if (!ctx || !musGain) return;
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const f = ctx.createBiquadFilter();
-
-      o.type = 'sine';
-      o.frequency.setValueAtTime(freq, start);
-
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(120, start);
-      f.Q.setValueAtTime(0.7, start);
-
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.08 * vol, start + 0.04);
-      g.gain.exponentialRampToValueAtTime(0.045 * vol, start + 0.55);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-
-      o.connect(f);
-      f.connect(g);
-      g.connect(musGain);
-
-      o.start(start);
-      o.stop(start + dur + 0.05);
-    }
-
-    function startMusicPulse() {
-      if (!musicOn || !ctx) return;
-
-      const pulseLoop = () => {
-        if (!musicOn || !ctx) return;
-
-        const today = dailySeedUTC() >>> 0;
-        if (!musicProfile || musicDayKey !== today) {
-          musicProfile = makeDailyMusicProfile();
-          musicDayKey = musicProfile.day;
-        }
-
-        const p = musicProfile;
-        const now = ctx.currentTime;
-
-        let kickBase = 46;
-        let subBase = 40;
-        let intervalMin = 2400;
-        let intervalMax = 4200;
-
-        if (p.name === 'void') {
-          kickBase = 44; subBase = 38; intervalMin = 3200; intervalMax = 5200;
-        } else if (p.name === 'nebula') {
-          kickBase = 48; subBase = 42; intervalMin = 2600; intervalMax = 4200;
-        } else if (p.name === 'ice') {
-          kickBase = 50; subBase = 44; intervalMin = 3000; intervalMax = 4800;
-        } else if (p.name === 'toxic') {
-          kickBase = 45; subBase = 39; intervalMin = 2200; intervalMax = 3600;
-        } else if (p.name === 'lava') {
-          kickBase = 42; subBase = 36; intervalMin = 1800; intervalMax = 3200;
-        }
-
-        musicSubPulse(now, subBase, 1.8, 0.85);
-
-        if (Math.random() < 0.82) {
-          musicKick(now + 0.02, kickBase, 0.95);
-        }
-
-        if (Math.random() < 0.38) {
-          musicKick(now + 0.72 + Math.random() * 0.18, kickBase * 0.98, 0.55);
-        }
-
-        const next = intervalMin + Math.random() * (intervalMax - intervalMin);
-        musicPulseTimer = setTimeout(pulseLoop, next);
-      };
-
-      pulseLoop();
-    }
-	  
     function startMusic() {
       ensure();
       stopMusic();
-
-      musicPhase = 0;
-      musicDayKey = 0;
-      musicProfile = null;
-
-      startMusicPulse();
-
+      // мягкий эмбиент: редкие "нотки", без пилы
+      const scale = [0, 3, 5, 7, 10]; // минор пентатоника
+      const base = 196; // G3
       const playOne = () => {
         if (!musicOn || !ctx) return;
-
-        const today = dailySeedUTC() >>> 0;
-        if (!musicProfile || musicDayKey !== today) {
-          musicProfile = makeDailyMusicProfile();
-          musicDayKey = musicProfile.day;
-          musicPhase = 0;
-        }
-
         const now = ctx.currentTime;
-        const p = musicProfile;
-        const scale = p.scale;
+        const note = scale[(musicPhase + Math.floor(Math.random()*2)) % scale.length];
+        const freq = base * Math.pow(2, note/12) * (Math.random() < 0.5 ? 1 : 2);
+        musicPhase = (musicPhase + 1) % scale.length;
 
-        const degreeA = scale[musicPhase % scale.length];
-        const degreeB = scale[(musicPhase + 2) % scale.length];
-        const baseFreq = p.root * Math.pow(2, degreeA / 12);
-        const upperFreq = p.root * Math.pow(2, (degreeB + 12) / 12);
-        const subFreq = p.root * 0.5;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, now);
 
-        // низкий дрон
-        musicVoice(subFreq, now, 4.8, 0.040, p.oscA, p.lp * 0.72, -p.spread);
+        // огибающая
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
 
-        // основная подушка
-        musicVoice(baseFreq, now, 3.6 + Math.random() * 0.9, 0.065, p.oscA, p.lp, p.spread);
+        // лёгкий lowpass
+        const f = ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.setValueAtTime(700, now);
 
-        // верхний "воздух"
-        if (Math.random() < 0.88) {
-          musicVoice(upperFreq, now + 0.22, 2.8 + Math.random() * 0.8, 0.042, p.oscB, p.lp + 220, -p.spread * 0.5);
-        }
+        o.connect(f);
+        f.connect(g);
+        g.connect(musGain);
 
-        // редкий дополнительный тон
-        if (Math.random() < 0.32) {
-          const degreeC = scale[(musicPhase + 1) % scale.length];
-          const midFreq = p.root * Math.pow(2, degreeC / 12) * 2;
-          musicVoice(midFreq, now + 0.08, 2.2, 0.028, 'sine', p.lp + 120, 0);
-        }
+        o.start(now);
+        o.stop(now + 0.60);
 
-        musicPhase = (musicPhase + 1) % (scale.length * 2);
-
-        const next = p.stepMin + Math.random() * (p.stepMax - p.stepMin);
+        const next = 520 + Math.random()*600; // пауза между нотами
         musicTimer = setTimeout(playOne, next);
       };
-
       playOne();
     }
 
@@ -574,8 +413,6 @@
   const elCoins = document.getElementById('coins');
   const elMass = document.getElementById('mass');
   const elScore = document.getElementById('score');
-  const elRelics = document.getElementById('relics');
-  const elExtract = document.getElementById('extract');
   const elHP = document.getElementById('hp');
   const elLv = document.getElementById('lv');
   const elBest = document.getElementById('best');
@@ -591,6 +428,16 @@
   const onlineGhostEl = document.getElementById('onlineGhost');
   const onlineTopEl = document.getElementById('onlineTop');
   const onlinePanelEl = document.getElementById('onlinePanel');
+
+  const nickGateEl = document.getElementById('nickGate');
+  const nickGateInputEl = document.getElementById('nickGateInput');
+  const nickGateOkEl = document.getElementById('nickGateOk');
+  const nickGateRandEl = document.getElementById('nickGateRand');
+
+  const netMiniEl = document.getElementById('netMini');
+  const netCountEl = document.getElementById('netCount');
+  const netRoomLabelEl = document.getElementById('netRoomLabel');
+  const netPlayersListEl = document.getElementById('netPlayersList');
 
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
@@ -663,27 +510,10 @@
     if (Number.isFinite(n) && n > 0) return (n >>> 0);
     return (dailySeedUTC() >>> 0);
   })();
-    const MODE = 'score';
-    const CHUNK = 900;                                 // world chunk size
-    const VIEW_PAD = 1400;                             // generate slightly beyond screen
-    const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
-
-    
-    const NET_ENABLED = new URLSearchParams(location.search).get('net') === '1';
-    const NET_ROOM = (new URLSearchParams(location.search).get('room') || 'daily').trim().slice(0, 24) || 'daily';
-
-    const NET = {
-      ws: null,
-      connected: false,
-      id: null,
-      room: NET_ROOM,
-      players: new Map(),
-      sendAcc: 0,
-      spawn: null,
-      color: '#79C8FF',
-      onlineCount: 1,
-      reconnectTimer: null,
-    };
+  const MODE = 'score';
+  const CHUNK = 900;                                 // world chunk size
+  const VIEW_PAD = 1400;                             // generate slightly beyond screen
+  const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
 
   // ==========================
   // Online leaderboard + ghost (Cloudflare Pages Functions)
@@ -700,58 +530,54 @@
     lastRefreshAt: 0,
   };
 
-  const LOCAL_TOP_KEY = `voidrun_local_top_${SEED}_${MODE}`;
-
-  function localLoadTop() {
-    try {
-      const rows = JSON.parse(localStorage.getItem(LOCAL_TOP_KEY) || '[]');
-      return Array.isArray(rows) ? rows : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function localSaveTop(rows) {
-    try {
-      localStorage.setItem(LOCAL_TOP_KEY, JSON.stringify(rows.slice(0, 10)));
-    } catch (e) {}
-  }
-
-  function localSubmitTopRow() {
-    const rows = localLoadTop();
-    rows.push({
-      name: ONLINE.name || 'anon',
-      score: (player.score | 0),
-      relics: player.relics.length,
-      extracted: player.extracted ? 1 : 0,
-      time_ms: Math.floor(timeSurv * 1000),
-      coins: (player.coins | 0),
-      ghost: JSON.stringify(ONLINE.rec || []),
-    });
-
-    rows.sort((a, b) => {
-      if ((b.extracted|0) !== (a.extracted|0)) return (b.extracted|0) - (a.extracted|0);
-      if ((b.relics|0) !== (a.relics|0)) return (b.relics|0) - (a.relics|0);
-      if ((b.score|0) !== (a.score|0)) return (b.score|0) - (a.score|0);
-      return (b.time_ms|0) - (a.time_ms|0);
-    });
-
-    localSaveTop(rows);
-    ONLINE.top = rows.slice(0, 10);
-    onlineRenderTop();
-  }
-	
   function onlineSetName(n) {
     n = String(n || '').trim().slice(0,18);
     if (!n) return;
     ONLINE.name = n;
     localStorage.setItem('newsnake_name', n);
+    if (onlineNameEl) onlineNameEl.value = n;
     netSend({ type: 'rename', name: n });
+    syncNickInputs();
+    netRenderMiniList();
   }
 
-  // ==========================
-  // Realtime network (Node.js + ws)
-  // ==========================
+  function makeRandomNick() {
+    const a = ['Void','Dark','Nova','Ghost','Lava','Toxic','Ice','Nebula','Orbit','Pulse'];
+    const b = ['Fox','Wolf','Ray','Orb','Snake','Drift','Core','Spark','Shade','Byte'];
+    return `${a[(Math.random()*a.length)|0]}${b[(Math.random()*b.length)|0]}${(Math.random()*90+10)|0}`.slice(0,18);
+  }
+
+  function syncNickInputs() {
+    if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
+    if (nickGateInputEl) nickGateInputEl.value = ONLINE.name || '';
+  }
+
+  function openNickGate(force = false) {
+    if (!NET_ENABLED && !force) return;
+    if (!nickGateEl) return;
+
+    if (!ONLINE.name || force) {
+      nickGateEl.style.display = 'flex';
+      syncNickInputs();
+      setTimeout(() => {
+        if (nickGateInputEl) nickGateInputEl.focus();
+      }, 30);
+    } else {
+      nickGateEl.style.display = 'none';
+    }
+  }
+
+  function closeNickGate() {
+    if (nickGateEl) nickGateEl.style.display = 'none';
+  }
+
+  function applyNickFromGate() {
+    let v = (nickGateInputEl?.value || '').trim();
+    if (!v) v = makeRandomNick();
+    onlineSetName(v);
+    closeNickGate();
+  }
+
   function netWsUrl() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}/ws`;
@@ -764,7 +590,10 @@
   }
 
   function netConnect() {
-    if (!NET_ENABLED) return;
+    if (!NET_ENABLED) {
+      netRenderMiniList();
+      return;
+    }
     if (NET.ws && (NET.ws.readyState === 0 || NET.ws.readyState === 1)) return;
 
     const ws = new WebSocket(netWsUrl());
@@ -778,6 +607,7 @@
         room: NET.room,
         name: ONLINE.name || 'anon',
       });
+      netRenderMiniList();
     };
 
     ws.onmessage = (ev) => {
@@ -796,6 +626,7 @@
           cam.x = player.x;
           cam.y = player.y;
         }
+        netRenderMiniList();
         return;
       }
 
@@ -810,6 +641,7 @@
         }
 
         NET.onlineCount = 1 + NET.players.size;
+        netRenderMiniList();
       }
     };
 
@@ -817,6 +649,7 @@
       NET.connected = false;
       NET.players.clear();
       NET.onlineCount = 1;
+      netRenderMiniList();
 
       clearTimeout(NET.reconnectTimer);
       NET.reconnectTimer = setTimeout(() => {
@@ -850,7 +683,6 @@
   function drawNetPlayer(x, y, r, name, color, rel) {
     ctx.save();
 
-    // shadow
     ctx.globalAlpha = 0.22;
     ctx.fillStyle = 'rgba(0,0,0,0.40)';
     ctx.beginPath();
@@ -858,7 +690,6 @@
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // body
     const g = ctx.createLinearGradient(x-r, y-r, x+r, y+r);
     g.addColorStop(0, '#FFFFFF');
     g.addColorStop(0.18, color || '#79C8FF');
@@ -868,7 +699,6 @@
     ctx.arc(x, y, r, 0, TAU);
     ctx.fill();
 
-    // comparison ring
     if (rel !== 0) {
       ctx.strokeStyle = rel > 0 ? 'rgba(110,255,170,0.95)' : 'rgba(255,110,140,0.95)';
       ctx.lineWidth = 3 * DPR;
@@ -877,14 +707,12 @@
       ctx.stroke();
     }
 
-    // hp ring
     ctx.strokeStyle = 'rgba(255,255,255,0.30)';
     ctx.lineWidth = 2 * DPR;
     ctx.beginPath();
     ctx.arc(x, y, r * 1.02, 0, TAU);
     ctx.stroke();
 
-    // nick
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
     ctx.textAlign = 'center';
@@ -913,15 +741,97 @@
     }
   }
 
+  function drawSelfNick() {
+    const x = W / 2;
+    const y = H / 2;
+    const r = player.r;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(120,255,190,0.96)';
+    ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 10 * DPR);
+    ctx.restore();
+  }
+
+  function drawNetLabelsOnTop(sx, sy) {
+    if (!NET_ENABLED) return;
+
+    const eatF = 1.12;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    for (const p of NET.players.values()) {
+      if (!p.alive) continue;
+
+      const x = sx(p.x);
+      const y = sy(p.y);
+
+      if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
+
+      const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
+
+      ctx.font = `${Math.max(12 * DPR, p.r * 0.42)}px system-ui,Segoe UI,Arial`;
+      ctx.fillStyle = rel > 0
+        ? 'rgba(110,255,170,0.98)'
+        : rel < 0
+        ? 'rgba(255,120,145,0.98)'
+        : 'rgba(255,255,255,0.95)';
+
+      ctx.fillText(String(p.name || 'anon').slice(0,18), x, y - p.r - 10 * DPR);
+    }
+
+    ctx.restore();
+  }
+
+  function netRenderMiniList() {
+    if (netMiniEl) netMiniEl.style.display = NET_ENABLED ? 'block' : 'none';
+
+    if (netCountEl) netCountEl.textContent = String(1 + NET.players.size);
+    if (netRoomLabelEl) netRoomLabelEl.textContent = `room ${NET.room}`;
+
+    if (!netPlayersListEl) return;
+
+    const rows = [];
+    rows.push(`🟢 ты: ${(ONLINE.name || 'anon').slice(0,18)}`);
+
+    for (const p of NET.players.values()) {
+      rows.push(`⚪ ${String(p.name || 'anon').slice(0,18)}`);
+    }
+
+    netPlayersListEl.innerHTML = rows.join('<br>');
+  }
+
   function onlineInitUI() {
     if (onlineSeedEl) {
       onlineSeedEl.textContent = NET_ENABLED
         ? `room ${NET_ROOM} • seed ${SEED}`
         : `seed ${SEED}`;
     }
-    if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
+
     if (onlinePanelEl) onlinePanelEl.style.display = 'none';
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
+
+    syncNickInputs();
+    netRenderMiniList();
+
+    if (nickGateRandEl) {
+      nickGateRandEl.onclick = () => {
+        const v = makeRandomNick();
+        if (nickGateInputEl) nickGateInputEl.value = v;
+      };
+    }
+
+    if (nickGateOkEl) nickGateOkEl.onclick = () => applyNickFromGate();
+
+    if (nickGateInputEl) {
+      nickGateInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') applyNickFromGate();
+      });
+    }
 
     if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
     if (onlineNameEl) {
@@ -929,27 +839,21 @@
         if (e.key === 'Enter') onlineSetName(onlineNameEl.value);
       });
     }
+
     if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
+
+    openNickGate(false);
   }
 
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
-
     for (const row of ONLINE.top) {
       const li = document.createElement('li');
       li.style.margin = '0 0 6px 0';
-
-      const parts = [];
-      if (row.extracted) parts.push('✅');
-      if (typeof row.relics === 'number') parts.push(`реликвии ${row.relics}/3`);
-      if (typeof row.score === 'number') parts.push(`score ${row.score}`);
-      if (typeof row.time_ms === 'number') parts.push(`${(row.time_ms / 1000).toFixed(1)}s`);
-
-      li.innerHTML = `<b>${row.name || 'anon'}</b> <span style="opacity:.75">— ${parts.join(' • ')}</span>`;
+      li.innerHTML = `<b>${row.name}</b> <span style="opacity:.75">— ${row.score}</span>`;
       onlineTopEl.appendChild(li);
     }
-
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -966,25 +870,15 @@
   }
 
   async function onlineRefresh() {
-    let topLoaded = false;
-
     try {
       const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=10`);
-      if (!topRes.ok) throw new Error('top failed');
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
-      topLoaded = true;
     } catch (e) {}
-
-    if (!topLoaded) {
-      ONLINE.top = localLoadTop();
-      onlineRenderTop();
-    }
 
     try {
       const gRes = await fetch(`/api/ghost?seed=${SEED}&mode=${MODE}`);
-      if (!gRes.ok) throw new Error('ghost failed');
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -994,20 +888,11 @@
         const parsed = JSON.parse(ONLINE.ghost.ghost);
         if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
       }
-
       onlineRenderGhostLabel();
     } catch (e) {
-      ONLINE.ghost = ONLINE.top.length ? ONLINE.top[0] : null;
+      ONLINE.ghost = null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
-
-      if (ONLINE.ghost && ONLINE.ghost.ghost) {
-        try {
-          const parsed = JSON.parse(ONLINE.ghost.ghost);
-          if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
-        } catch (err) {}
-      }
-
       onlineRenderGhostLabel();
     }
 
@@ -1062,34 +947,27 @@
   }
 
   async function onlineSubmitResult(forceSubmit=false) {
-    if (MODE === 'expedition' && !forceSubmit && !player.extracted) return;
-
-    const payload = {
-      name: ONLINE.name || 'anon',
-      seed: SEED,
-      mode: MODE,
-      score: (player.score|0),
-      relics: player.relics.length,
-      extracted: player.extracted ? 1 : 0,
-      time_ms: Math.floor(timeSurv * 1000),
-      coins: (player.coins|0),
-      version: 'newsnake-pages-v1',
-      ghost: JSON.stringify(ONLINE.rec),
-    };
-
     try {
-      const res = await fetch('/api/submit', {
+      if (MODE === 'expedition' && !forceSubmit && !player.extracted) return;
+      const payload = {
+        name: ONLINE.name || 'anon',
+        seed: SEED,
+        mode: MODE,
+        score: (player.score|0),
+        relics: player.relics.length,
+        extracted: player.extracted ? 1 : 0,
+        time_ms: Math.floor(timeSurv * 1000),
+        coins: (player.coins|0),
+        version: 'newsnake-pages-v1',
+        ghost: JSON.stringify(ONLINE.rec),
+      };
+      await fetch('/api/submit', {
         method: 'POST',
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) throw new Error('submit failed');
       await onlineRefresh();
-    } catch (e) {
-      localSubmitTopRow();
-      onlineRenderGhostLabel();
-    }
+    } catch (e) {}
   }
 
 
@@ -1201,21 +1079,15 @@
     }
 
     // mines
-      for (let i=0;i<nM;i++){
-        const x = baseX + rnd()*CHUNK;
-        const y = baseY + rnd()*CHUNK;
-        const r = 22 + rnd()*10;
-        const phase = rnd()*TAU;
-        const drift = 0.25 + rnd()*0.85;
-        const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
-        mines.push({
-          x, y, r, phase, drift, kind,
-          seekCd: rnd()*2,
-          seekT: 0,
-          armed: 0.45 + rnd()*0.35,
-          tailCd: 0
-        });
-      }
+    for (let i=0;i<nM;i++){
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const r = 22 + rnd()*10;
+      const phase = rnd()*TAU;
+      const drift = 0.25 + rnd()*0.85;
+      const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
+      mines.push({x,y,r,phase,drift,kind,seekCd:rnd()*2,seekT:0});
+    }
 
     // torch pickup (reveals area)
     const torchP = (biome === 'nebula') ? 0.55 : (biome === 'lava' ? 0.28 : (biome === 'toxic' ? 0.30 : 0.38));
@@ -1518,9 +1390,7 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   });
 
   AudioFX.autoUnlock();
-	document.getElementById("btnMusic").style.opacity =
-    ((localStorage.getItem('newsnake_mus') ?? '0') === '1') ? "1" : "0.55";
-	
+
 	document.getElementById("btnSound").onclick = async () => {
 	  await AudioFX.unlock();
 	  const on = AudioFX.toggleEnabled();
@@ -1539,13 +1409,10 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
   }
 
   document.getElementById("btnTop").onclick = async () => {
-    await AudioFX.unlock();
-    AudioFX.click();
-    toggleTopPanel();
-    if (onlinePanelEl && onlinePanelEl.style.display === 'block') {
-      onlineRefresh();
-    }
-  };
+	  await AudioFX.unlock();
+	  AudioFX.click();
+	  toggleTopPanel();
+	};
 	
   function updateHUD() {
     elT.textContent = timeSurv.toFixed(1) + 's';
@@ -1554,20 +1421,6 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
     elLv.textContent = level;
     elScore.textContent = player.score | 0;
     elMass.textContent = (player.r / player.baseR).toFixed(2) + 'x';
-
-    if (elRelics) elRelics.textContent = `${player.relics.length}/${RELIC_GOAL}`;
-
-    if (elExtract) {
-      if (player.extracted) {
-        elExtract.textContent = 'DONE';
-      } else if (portal) {
-        elExtract.textContent = 'GO';
-      } else if (player.relics.length >= RELIC_GOAL) {
-        elExtract.textContent = `${Math.max(0, Math.ceil(EXTRACT_MIN_SEC - timeSurv))}s`;
-      } else {
-        elExtract.textContent = '—';
-      }
-    }
   }
 
   
@@ -2033,16 +1886,14 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
 		if (ch.torches) {
 
       // relics
-        if (ch.relics) {
-          for (const rr of ch.relics) {
-            if (collected.has(rr.id)) continue;
-            const grabR = player.r + rr.r + 10;
-            if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
-              collected.add(rr.id);
-              applyRelic(rr.type);
-            }
-          }
+      if (ch.relics) {
+        for (const rr of ch.relics) {
+          if (collected.has(rr.id)) continue;
+          const x = sx(rr.x), y = sy(rr.y);
+          if (x<-140 || y<-140 || x>W+140 || y>H+140) continue;
+          drawRelic(x,y,rr.r, rr.type);
         }
+      }
 
 		  for (const t of ch.torches) {
 			if (collected.has(t.id)) continue;
@@ -2058,68 +1909,60 @@ c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slim
         // mines
         for (const m of ch.mines) {
           const mr = m.r * mineScale;
-
-          m.armed = Math.max(0, (m.armed ?? 0) - dt);
-          m.tailCd = Math.max(0, (m.tailCd ?? 0) - dt);
-
           // slight motion (orbiting wobble)
           m.phase += dt * (0.6 + level*0.02) * m.drift;
           let mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
-          let my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
-
-          // seeker mines: редкие, с рывками, но НЕ "невозможно убежать"
-          if (m.kind === 'seeker' && level >= 10) {
-            m.seekCd = (m.seekCd ?? 0) - dt;
-            if (m.seekT > 0) {
-              m.seekT -= dt;
-              const hx = player.x - m.x;
-              const hy = player.y - m.y;
-              const hd = Math.hypot(hx, hy) || 1;
-              if (hd < 520) {
-                const hunt = clamp(18 + (level-10)*0.8, 18, 32);
-                m.x += (hx/hd) * hunt * dt;
-                m.y += (hy/hd) * hunt * dt;
-              }
-            } else if (m.seekCd <= 0) {
-              m.seekT = 1.2;
-              m.seekCd = 3.0 + Math.random()*2.0;
-            }
+		  let my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
+      // seeker mines: редкие, с рывками, но НЕ 'невозможно убежать'
+      if (m.kind === 'seeker' && level >= 10) {
+        m.seekCd = (m.seekCd ?? 0) - dt;
+        if (m.seekT > 0) {
+          m.seekT -= dt;
+          const hx = player.x - m.x;
+          const hy = player.y - m.y;
+          const hd = Math.hypot(hx, hy) || 1;
+          if (hd < 520) {
+            const hunt = clamp(18 + (level-10)*0.8, 18, 32);
+            m.x += (hx/hd) * hunt * dt;
+            m.y += (hy/hd) * hunt * dt;
           }
+        } else if (m.seekCd <= 0) {
+          m.seekT = 1.2;
+          m.seekCd = 3.0 + Math.random()*2.0;
+        }
+      }
 
-          const mineActive = (m.armed ?? 0) <= 0;
-
-          // Near miss bonus
+          // Near miss bonus (adrenaline)
           const near = (player.r + mr + 22);
           const near2 = near*near;
           const d2 = dist2(player.x, player.y, mx, my);
           if (d2 < near2 && d2 > (player.r + mr + 4) ** 2) {
             player.nearMiss += dt * 1.6;
-            player.comboTimer = 0.9;
+			player.comboTimer = 0.9; // держим комбо пока рядом опасно
           }
 
           // Player hit
           const hitR = (player.r + mr + 2);
-          if (mineActive && player.invulnTime <= 0 && d2 < hitR*hitR) {
+          if (player.invulnTime <= 0 && d2 < hitR*hitR) {
             if (!hitThisFrame) {
               hitThisFrame = true;
               damagePlayer();
             }
           }
 
-          // Tail hit
-          if (mineActive && tail.points.length > 6) {
-            const N = Math.min(32, tail.points.length);
+          // Tail hit (if any)
+          if (tail.points.length > 6) {
+            // check few tail points near the end (most relevant)
+            // (cheap) sample last N
+            const N = Math.min(40, tail.points.length);
             for (let i = tail.points.length - 1; i >= tail.points.length - N; i--) {
               const p = tail.points[i];
-              const tr = 8;
+              const tr = 8; // tail thickness
               const hr = (mr + tr);
-
-              if (dist2(p.x, p.y, mx, my) < hr*hr) {
-                if ((m.tailCd ?? 0) <= 0) {
-                  loseTailSegments(70);
-                  m.tailCd = 0.55;
-                  player.nearMiss += 0.25;
-                }
+              if (dist2(p.x,p.y, mx,my) < hr*hr) {
+                // cut tail hard, and add adrenaline
+                loseTailSegments(140);
+                player.nearMiss += 0.25;
                 break;
               }
             }
@@ -2237,22 +2080,17 @@ if (ch.mimics) {
       spawnBurst(mm.x, mm.y, 10, 22, 280);
       kickShake(14, 0.18);
 
-      // spawn extra mines around (nasty surprise, but fair)
+      // spawn extra mines around (nasty surprise)
       const count = 4 + Math.floor(Math.random()*3);
       for (let i=0;i<count;i++){
         const a = Math.random()*TAU;
-        const d = 110 + Math.random()*140;
+        const d = 90 + Math.random()*120;
         ch.mines.push({
           x: mm.x + Math.cos(a)*d,
           y: mm.y + Math.sin(a)*d,
           r: 18 + Math.random()*10,
           phase: Math.random()*TAU,
-          drift: 0.4 + Math.random()*0.9,
-          kind: 'wobble',
-          seekCd: Math.random()*2,
-          seekT: 0,
-          armed: 0.75,
-          tailCd: 0
+          drift: 0.4 + Math.random()*0.9
         });
       }
     }
@@ -2418,7 +2256,10 @@ if (ch.hunters) {
       state = 'DEAD';
 	  AudioFX.dead();
 
-	  // отправка результата один раз
+		// отправка результата в онлайн
+      // отправка результата в онлайн
+      onlineSubmitResult();
+// submit score + ghost to online leaderboard
       onlineSubmitResult();
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
       if (timeSurv > bestNow) {
@@ -2637,7 +2478,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-        drawMine(x, y, m.r * mineScaleR, m.armed ?? 0);
+        drawMine(x,y,m.r * mineScaleR);
       }
 // agar-style cells
 if (ch.cells) {
@@ -2696,14 +2537,6 @@ if (ch.hunters) {
     drawPellet(x,y,p.r);
   }
 
-  // extraction portal
-  if (portal) {
-    const pxPortal = sx(portal.x), pyPortal = sy(portal.y);
-    if (!(pxPortal < -180 || pyPortal < -180 || pxPortal > W + 180 || pyPortal > H + 180)) {
-      drawPortal(pxPortal, pyPortal, portal.r);
-    }
-  }
-
   // ghost (online)
   onlineGhostDraw(sx, sy);
 
@@ -2712,6 +2545,7 @@ if (ch.hunters) {
 
   // player (world)
   drawPlayer(sx(player.x), sy(player.y), player.r);
+  drawSelfNick();
 
   if (state === 'RUN') drawTarget(mouseX, mouseY);
 
@@ -2769,6 +2603,7 @@ if (ch.hunters) {
 
   // Player outline on top (always readable)
   drawPlayerOutline(px, py, player.r);
+  drawNetLabelsOnTop(sx, sy);
 }
 
   function drawBackground() {
@@ -2963,76 +2798,46 @@ function drawCoin(x,y,r) {
   function tryExtract() {
     if (!portal || player.extracted) return false;
     const rr = player.r + portal.r;
-
     if (dist2(player.x, player.y, portal.x, portal.y) < rr*rr) {
       player.extracted = true;
       state = 'DEAD';
       overlay.style.display = 'flex';
-
-      overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
-      overlay.querySelectorAll('p')[0].innerHTML =
-        `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
-      overlay.querySelectorAll('p')[1].innerHTML =
-        `Успешный выход из экспедиции. Результат отправлен в таблицу лидеров.`;
-      overlay.querySelectorAll('p')[2].innerHTML =
-        `Нажми <b>Заново</b>, чтобы начать новый забег.`;
-
-      overlay.querySelector('#start').textContent = 'Заново';
-
-      onlineSubmitResult(true).then(() => onlineRefresh());
+      msgEl.innerHTML = `<div style="font-size:28px;margin-bottom:6px;">ЭКСТРАКЦИЯ ✅</div>
+      <div style="opacity:.85">Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b></div>`;
+      btnStart.textContent = 'Заново';
+      // submit ONLY extracted in expedition
+      onlineSubmitResult(true).then(()=>onlineRefresh());
       return true;
     }
-
     return false;
   }
 
-  function drawMine(x, y, r, armT = 0) {
+  function drawMine(x,y,r) {
     ctx.save();
-
-    const telegraph = armT > 0;
-    const pulse = telegraph ? (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() * 0.03))) : 1;
-
-    // glow
-    const glow = ctx.createRadialGradient(x, y, 1, x, y, r * 3.0);
-    if (telegraph) {
-      glow.addColorStop(0, `rgba(255,190,90,${0.18 + 0.18 * pulse})`);
-      glow.addColorStop(1, 'rgba(255,190,90,0)');
-    } else {
-      glow.addColorStop(0, 'rgba(255,60,120,0.40)');
-      glow.addColorStop(1, 'rgba(255,60,120,0)');
-    }
+    // danger glow
+    const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.0);
+    glow.addColorStop(0, 'rgba(255,60,120,0.40)');
+    glow.addColorStop(1, 'rgba(255,60,120,0)');
     ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 3, 0, TAU);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,r*3,0,TAU); ctx.fill();
 
     // body
-    const g = ctx.createLinearGradient(x-r, y-r, x+r, y+r);
-    if (telegraph) {
-      g.addColorStop(0, '#FFD36A');
-      g.addColorStop(1, '#C77900');
-    } else {
-      g.addColorStop(0, '#FF3C7A');
-      g.addColorStop(1, '#B10C3F');
-    }
+    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+    g.addColorStop(0,'#FF3C7A');
+    g.addColorStop(1,'#B10C3F');
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
 
     // spikes
-    ctx.strokeStyle = telegraph ? 'rgba(255,240,180,0.9)' : 'rgba(255,170,200,0.8)';
-    ctx.lineWidth = 3 * DPR;
-    for (let i=0; i<10; i++) {
-      const a = (i/10) * TAU;
+    ctx.strokeStyle = 'rgba(255,170,200,0.8)';
+    ctx.lineWidth = 3*DPR;
+    for (let i=0;i<10;i++){
+      const a = (i/10)*TAU;
       const x1 = x + Math.cos(a) * (r*0.92);
       const y1 = y + Math.sin(a) * (r*0.92);
       const x2 = x + Math.cos(a) * (r*1.18);
       const y2 = y + Math.sin(a) * (r*1.18);
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     }
 
     ctx.restore();
