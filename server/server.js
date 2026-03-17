@@ -20,8 +20,8 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-const rooms = new Map();        // roomName -> { name, players: Map(id -> player) }
-const leaderboards = new Map(); // `${seed}::${mode}` -> rows[]
+const rooms = new Map();
+const leaderboards = new Map();
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
@@ -64,7 +64,7 @@ function submitRow(raw) {
     extracted: raw.extracted ? 1 : 0,
     time_ms: Number(raw.time_ms) || 0,
     coins: Number(raw.coins) || 0,
-    version: String(raw.version || 'node-ws-v1').slice(0, 48),
+    version: String(raw.version || 'node-ws-v2').slice(0, 48),
     ghost: typeof raw.ghost === 'string' ? raw.ghost.slice(0, 200000) : '',
     created_at: Date.now(),
   };
@@ -155,6 +155,47 @@ function serveStatic(req, res, pathname) {
   });
 }
 
+function makeSnapshot(room) {
+  const players = [...room.players.values()].map(p => ({
+    id: p.id,
+    name: p.name,
+    x: p.x,
+    y: p.y,
+    r: p.r,
+    hp: p.hp,
+    score: p.score,
+    alive: p.alive,
+    extracted: p.extracted,
+    color: p.color,
+  }));
+
+  const roster = [...room.players.values()].map(p => ({
+    id: p.id,
+    name: p.name,
+    alive: p.alive,
+    color: p.color,
+  }));
+
+  return JSON.stringify({
+    type: 'snapshot',
+    room: room.name,
+    count: room.players.size,
+    roster,
+    players,
+    ts: Date.now(),
+  });
+}
+
+function broadcastRoom(room) {
+  if (!room || !room.players.size) return;
+  const payload = makeSnapshot(room);
+  for (const p of room.players.values()) {
+    if (p.ws && p.ws.readyState === 1) {
+      p.ws.send(payload);
+    }
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
@@ -229,10 +270,12 @@ wss.on('connection', (ws) => {
     ws.player.lastSeen = Date.now();
 
     if (msg.type === 'hello') {
-      const oldRoom = rooms.get(ws.player.room);
-      if (oldRoom) {
-        oldRoom.players.delete(ws.player.id);
-        if (!oldRoom.players.size) rooms.delete(oldRoom.name);
+      const prevRoomName = ws.player.room;
+      const prevRoom = rooms.get(prevRoomName);
+      if (prevRoom) {
+        prevRoom.players.delete(ws.player.id);
+        if (!prevRoom.players.size) rooms.delete(prevRoom.name);
+        else broadcastRoom(prevRoom);
       }
 
       const room = getRoom(msg.room);
@@ -259,11 +302,25 @@ wss.on('connection', (ws) => {
           spawn,
         }));
       }
+
+      broadcastRoom(room);
       return;
     }
 
     if (msg.type === 'rename') {
       ws.player.name = sanitizeName(msg.name);
+      const room = rooms.get(ws.player.room);
+      if (room) broadcastRoom(room);
+      return;
+    }
+
+    if (msg.type === 'ping') {
+      if (typeof msg.name === 'string' && msg.name.trim()) {
+        ws.player.name = sanitizeName(msg.name);
+      }
+      if (typeof msg.alive !== 'undefined') {
+        ws.player.alive = !!msg.alive;
+      }
       return;
     }
 
@@ -284,6 +341,7 @@ wss.on('connection', (ws) => {
     if (room) {
       room.players.delete(ws.player.id);
       if (!room.players.size) rooms.delete(room.name);
+      else broadcastRoom(room);
     }
   });
 });
@@ -293,7 +351,7 @@ setInterval(() => {
 
   for (const [roomName, room] of rooms) {
     for (const [id, p] of room.players) {
-      if (!p.ws || p.ws.readyState !== 1 || now - p.lastSeen > 10000) {
+      if (!p.ws || p.ws.readyState !== 1 || now - p.lastSeen > 30000) {
         room.players.delete(id);
       }
     }
@@ -303,33 +361,9 @@ setInterval(() => {
       continue;
     }
 
-    const players = [...room.players.values()].map(p => ({
-      id: p.id,
-      name: p.name,
-      x: p.x,
-      y: p.y,
-      r: p.r,
-      hp: p.hp,
-      score: p.score,
-      alive: p.alive,
-      extracted: p.extracted,
-      color: p.color,
-    }));
-
-    const payload = JSON.stringify({
-      type: 'snapshot',
-      room: room.name,
-      players,
-      ts: now,
-    });
-
-    for (const p of room.players.values()) {
-      if (p.ws && p.ws.readyState === 1) {
-        p.ws.send(payload);
-      }
-    }
+    broadcastRoom(room);
   }
-}, 1000 / 15);
+}, 1000 / 10);
 
 server.listen(PORT, HOST, () => {
   console.log(`VoidRun network server: http://${HOST}:${PORT}`);
