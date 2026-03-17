@@ -684,6 +684,22 @@
       reconnectTimer: null,
     };
 
+    const NET_ENABLED = new URLSearchParams(location.search).get('net') === '1';
+    const NET_ROOM = (new URLSearchParams(location.search).get('room') || 'daily').trim().slice(0, 24) || 'daily';
+
+    const NET = {
+      ws: null,
+      connected: false,
+      id: null,
+      room: NET_ROOM,
+      players: new Map(),
+      sendAcc: 0,
+      spawn: null,
+      color: '#79C8FF',
+      onlineCount: 1,
+      reconnectTimer: null,
+    };
+
   // ==========================
   // Online leaderboard + ghost (Cloudflare Pages Functions)
   // ==========================
