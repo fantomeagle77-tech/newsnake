@@ -175,7 +175,7 @@
   ">
     <div style="font-size:28px; font-weight:900; margin-bottom:10px;">Вход в арену</div>
     <div style="opacity:.82; line-height:1.45; margin-bottom:14px;">
-      Введи ник. Его увидят другие игроки в комнате.
+      Введи ник. Он сохранится локально и будет использоваться при следующем входе.
     </div>
 
     <input id="nickGateInput" maxlength="18" placeholder="Твой ник" style="
@@ -188,7 +188,7 @@
     " />
 
     <div style="display:flex; gap:10px; margin-top:14px;">
-      <button class="btn" id="nickGateOk" style="flex:1;">Играть</button>
+      <button class="btn" id="nickGateOk" style="flex:1;">Войти</button>
       <button class="btn" id="nickGateRand" style="padding:0 18px;">🎲</button>
     </div>
   </div>
@@ -435,6 +435,7 @@
   const netCountEl = document.getElementById('netCount');
   const netRoomLabelEl = document.getElementById('netRoomLabel');
   const netPlayersListEl = document.getElementById('netPlayersList');
+const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
@@ -512,7 +513,7 @@
   const VIEW_PAD = 1400;                             // generate slightly beyond screen
   const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
 
-  const NET_ENABLED = new URLSearchParams(location.search).get('net') === '1';
+  const NET_ENABLED = new URLSearchParams(location.search).get('net') !== '0';
   const NET_ROOM = (new URLSearchParams(location.search).get('room') || 'daily').trim().slice(0, 24) || 'daily';
 
   const NET = {
@@ -526,6 +527,7 @@
     color: '#79C8FF',
     onlineCount: 1,
     reconnectTimer: null,
+    joinSent: false,
   };
 
   // ==========================
@@ -549,6 +551,7 @@
     ONLINE.name = n;
     localStorage.setItem('newsnake_name', n);
     netSend({ type: 'rename', name: n });
+    netHello(true);
     syncNickInputs();
     netRenderMiniList();
   }
@@ -616,6 +619,21 @@
     NET.ws.send(JSON.stringify(obj));
   }
 
+  function netHello(force = false) {
+    if (!NET_ENABLED) return;
+    if (!NET.ws || NET.ws.readyState !== 1) return;
+    if (!ONLINE.name) return;
+    if (NET.joinSent && !force) return;
+
+    netSend({
+      type: 'hello',
+      room: NET.room,
+      name: ONLINE.name || 'anon',
+    });
+
+    NET.joinSent = true;
+  }
+
   function netConnect() {
     if (!NET_ENABLED) return;
     if (NET.ws && (NET.ws.readyState === 0 || NET.ws.readyState === 1)) return;
@@ -626,11 +644,8 @@
     ws.onopen = () => {
       NET.connected = true;
       NET.sendAcc = 0;
-      netSend({
-        type: 'hello',
-        room: NET.room,
-        name: ONLINE.name || 'anon',
-      });
+      NET.joinSent = false;
+      netHello();
       netRenderMiniList();
     };
 
@@ -663,6 +678,7 @@
 
     ws.onclose = () => {
       NET.connected = false;
+      NET.joinSent = false;
       NET.players.clear();
       NET.onlineCount = 1;
       netRenderMiniList();
@@ -847,6 +863,8 @@
       };
     }
 
+    if (netRenameBtnEl) netRenameBtnEl.onclick = () => openNickGate(true);
+
     if (nickGateOkEl) nickGateOkEl.onclick = () => applyNickFromGate();
     if (nickGateInputEl) {
       nickGateInputEl.addEventListener('keydown', (e) => {
@@ -854,7 +872,7 @@
       });
     }
 
-    openNickGate(NET_ENABLED);
+    if (NET_ENABLED) openNickGate(true);
   }
 
   function onlineRenderTop() {
