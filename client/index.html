@@ -99,115 +99,113 @@
     <button class="btn" id="restart">Заново</button>
   </div>
 
-  <div class="hint">
-      <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
-      <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+  
+<div class="hint">
+  <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
+  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+</div>
+
+<div id="netMini" style="
+  position:fixed; left:16px; top:86px; z-index:9998;
+  min-width:200px; max-width:260px;
+  padding:10px 12px;
+  border-radius:16px;
+  background:rgba(10,14,28,.52);
+  border:1px solid rgba(90,140,255,.15);
+  color:#EAF1FF;
+  backdrop-filter: blur(12px);
+  box-shadow:0 12px 40px rgba(0,0,0,.30);
+">
+  <div style="font-weight:800;">🌐 Онлайн: <span id="netCount">1</span></div>
+  <div id="netRoomLabel" style="font-size:12px; opacity:.72; margin-top:4px;">room daily</div>
+  <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
+    ты один
+  </div>
+</div>
+
+<div id="onlinePanel" style="
+  position:fixed; right:16px; top:86px; z-index:9999;
+  width:280px; padding:12px;
+  border-radius:16px; background:rgba(10, 14, 28, .62);
+  border:1px solid rgba(90, 140, 255, .15);
+  color:#EAF1FF; backdrop-filter: blur(12px);
+  box-shadow: 0 20px 70px rgba(0,0,0,.45);
+  pointer-events:auto;
+  display:none;
+">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+    <div style="font-weight:800;">🌐 TOP дня</div>
+    <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
+  </div>
+
+  <div style="margin-top:10px; display:flex; gap:8px;">
+    <input id="onlineName" maxlength="18" placeholder="Ник" style="
+      flex:1; padding:8px 10px; border-radius:12px;
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(0,0,0,0.25); color:#fff; outline:none;
+    "/>
+    <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
+    <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
+  </div>
+
+  <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
+    Призрак дня: загрузка…
+  </div>
+
+  <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+
+  <div style="margin-top:10px; font-size:11px; opacity:.65;">
+    Отправка результата — автоматически при поражении.
+  </div>
+</div>
+
+<div id="nickGate" style="
+  position:fixed; inset:0; z-index:10020;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.72); backdrop-filter: blur(8px);
+">
+  <div style="
+    width:min(92vw,420px);
+    border-radius:24px;
+    padding:22px;
+    background:rgba(8,12,24,.92);
+    border:1px solid rgba(90,140,255,.18);
+    box-shadow:0 20px 80px rgba(0,0,0,.45);
+    color:#EAF1FF;
+  ">
+    <div style="font-size:28px; font-weight:900; margin-bottom:10px;">Вход в арену</div>
+    <div style="opacity:.82; line-height:1.45; margin-bottom:14px;">
+      Введи ник. Его увидят другие игроки в комнате.
     </div>
 
-    <div id="netMini" style="
-      position:fixed; left:16px; top:86px; z-index:9998;
-      min-width:180px; max-width:240px;
-      padding:10px 12px;
-      border-radius:16px;
-      background:rgba(10,14,28,.52);
-      border:1px solid rgba(90,140,255,.15);
-      color:#EAF1FF;
-      backdrop-filter: blur(12px);
-      box-shadow:0 12px 40px rgba(0,0,0,.30);
-      display:none;
-    ">
-      <div style="font-weight:800;">🌐 Онлайн: <span id="netCount">1</span></div>
-      <div id="netRoomLabel" style="font-size:12px; opacity:.72; margin-top:4px;">room daily</div>
-      <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
-        ты один
-      </div>
-    </div>
+    <input id="nickGateInput" maxlength="18" placeholder="Твой ник" style="
+      width:100%; box-sizing:border-box;
+      padding:14px 16px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(0,0,0,.28);
+      color:#fff; outline:none; font-size:18px;
+    " />
 
-    <div id="onlinePanel" style="
-      position:fixed; right:16px; top:86px; z-index:9999;
-      width:280px; padding:12px;
-      border-radius:16px; background:rgba(10, 14, 28, .62);
-      border:1px solid rgba(90, 140, 255, .15);
-      color:#EAF1FF; backdrop-filter: blur(12px);
-      box-shadow: 0 20px 70px rgba(0,0,0,.45);
-      pointer-events:auto;
-      display:none;
-    ">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-        <div style="font-weight:800;">🌐 TOP дня</div>
-        <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
-      </div>
-
-      <div style="margin-top:10px; display:flex; gap:8px;">
-        <input id="onlineName" maxlength="18" placeholder="Ник" style="
-          flex:1; padding:8px 10px; border-radius:12px;
-          border:1px solid rgba(255,255,255,0.14);
-          background:rgba(0,0,0,0.25); color:#fff; outline:none;
-        "/>
-        <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
-        <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
-      </div>
-
-      <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
-        Призрак дня: загрузка…
-      </div>
-
-      <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
-
-      <div style="margin-top:10px; font-size:11px; opacity:.65;">
-        Отправка результата — автоматически при поражении.
-      </div>
-    </div>
-
-    <div id="nickGate" style="
-      position:fixed; inset:0; z-index:10020;
-      display:none; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.72); backdrop-filter: blur(8px);
-    ">
-      <div style="
-        width:min(92vw,420px);
-        border-radius:24px;
-        padding:22px;
-        background:rgba(8,12,24,.92);
-        border:1px solid rgba(90,140,255,.18);
-        box-shadow:0 20px 80px rgba(0,0,0,.45);
-        color:#EAF1FF;
-      ">
-        <div style="font-size:28px; font-weight:900; margin-bottom:10px;">
-          Вход в арену
-        </div>
-
-        <div style="opacity:.82; line-height:1.45; margin-bottom:14px;">
-          Введи ник. Его увидят другие игроки в комнате.
-        </div>
-
-        <input id="nickGateInput" maxlength="18" placeholder="Твой ник" style="
-          width:100%; box-sizing:border-box;
-          padding:14px 16px;
-          border-radius:14px;
-          border:1px solid rgba(255,255,255,.14);
-          background:rgba(0,0,0,.28);
-          color:#fff; outline:none; font-size:18px;
-        " />
-
-        <div style="display:flex; gap:10px; margin-top:14px;">
-          <button class="btn" id="nickGateOk" style="flex:1;">Играть</button>
-          <button class="btn" id="nickGateRand" style="padding:0 18px;">🎲</button>
-        </div>
-      </div>
-    </div>
-
-  <div class="centerMsg" id="overlay">
-    <div class="box">
-      <h2>Void Run — бесконечный мир</h2>
-      <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
-      <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
-      <p>Нажми <b>Старт</b>. Потом можно деплоить на Cloudflare Pages.</p>
-      <div class="row">
-        <button class="btn" id="start">Старт</button>
-      </div>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn" id="nickGateOk" style="flex:1;">Играть</button>
+      <button class="btn" id="nickGateRand" style="padding:0 18px;">🎲</button>
     </div>
   </div>
+</div>
+
+<div class="centerMsg" id="overlay">
+  <div class="box">
+    <h2>Void Run — бесконечный мир</h2>
+    <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
+    <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
+    <p>Нажми <b>Старт</b>. Сетевой режим — по одному адресу с одинаковыми room и seed.</p>
+    <div class="row">
+      <button class="btn" id="start">Старт</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
 
@@ -434,7 +432,6 @@
   const nickGateOkEl = document.getElementById('nickGateOk');
   const nickGateRandEl = document.getElementById('nickGateRand');
 
-  const netMiniEl = document.getElementById('netMini');
   const netCountEl = document.getElementById('netCount');
   const netRoomLabelEl = document.getElementById('netRoomLabel');
   const netPlayersListEl = document.getElementById('netPlayersList');
@@ -551,7 +548,6 @@
     if (!n) return;
     ONLINE.name = n;
     localStorage.setItem('newsnake_name', n);
-    if (onlineNameEl) onlineNameEl.value = n;
     netSend({ type: 'rename', name: n });
     syncNickInputs();
     netRenderMiniList();
@@ -571,13 +567,10 @@
   function openNickGate(force = false) {
     if (!NET_ENABLED && !force) return;
     if (!nickGateEl) return;
-
-    if (!ONLINE.name || force) {
+    if (force || !ONLINE.name) {
       nickGateEl.style.display = 'flex';
       syncNickInputs();
-      setTimeout(() => {
-        if (nickGateInputEl) nickGateInputEl.focus();
-      }, 30);
+      setTimeout(() => { if (nickGateInputEl) nickGateInputEl.focus(); }, 30);
     } else {
       nickGateEl.style.display = 'none';
     }
@@ -594,6 +587,24 @@
     closeNickGate();
   }
 
+  function netRenderMiniList() {
+    if (netCountEl) netCountEl.textContent = String(1 + NET.players.size);
+    if (netRoomLabelEl) netRoomLabelEl.textContent = `room ${NET.room}`;
+
+    if (!netPlayersListEl) return;
+    const rows = [];
+    rows.push(`🟢 ты: ${String(ONLINE.name || 'anon').slice(0,18)}`);
+
+    for (const p of NET.players.values()) {
+      rows.push(`⚪ ${String(p.name || 'anon').slice(0,18)}`);
+    }
+
+    netPlayersListEl.innerHTML = rows.join('<br>');
+  }
+
+  // ==========================
+  // Realtime network (Node.js + ws)
+  // ==========================
   function netWsUrl() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}/ws`;
@@ -606,10 +617,7 @@
   }
 
   function netConnect() {
-    if (!NET_ENABLED) {
-      netRenderMiniList();
-      return;
-    }
+    if (!NET_ENABLED) return;
     if (NET.ws && (NET.ws.readyState === 0 || NET.ws.readyState === 1)) return;
 
     const ws = new WebSocket(netWsUrl());
@@ -635,14 +643,6 @@
         NET.id = msg.id;
         NET.color = msg.color || NET.color;
         NET.spawn = msg.spawn || { x: 0, y: 0 };
-
-        if (state !== 'RUN' || timeSurv < 0.15) {
-          player.x = NET.spawn.x;
-          player.y = NET.spawn.y;
-          cam.x = player.x;
-          cam.y = player.y;
-        }
-        netRenderMiniList();
         return;
       }
 
@@ -699,6 +699,14 @@
   function drawNetPlayer(x, y, r, name, color, rel) {
     ctx.save();
 
+    const glow = ctx.createRadialGradient(x, y, 1, x, y, r * 2.9);
+    glow.addColorStop(0, `${color}55`);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.9, 0, TAU);
+    ctx.fill();
+
     ctx.globalAlpha = 0.22;
     ctx.fillStyle = 'rgba(0,0,0,0.40)';
     ctx.beginPath();
@@ -715,25 +723,19 @@
     ctx.arc(x, y, r, 0, TAU);
     ctx.fill();
 
-    if (rel !== 0) {
-      ctx.strokeStyle = rel > 0 ? 'rgba(110,255,170,0.95)' : 'rgba(255,110,140,0.95)';
-      ctx.lineWidth = 3 * DPR;
-      ctx.beginPath();
-      ctx.arc(x, y, r * 1.08, 0, TAU);
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.30)';
-    ctx.lineWidth = 2 * DPR;
+    ctx.strokeStyle = color || '#79C8FF';
+    ctx.lineWidth = 3 * DPR;
     ctx.beginPath();
-    ctx.arc(x, y, r * 1.02, 0, TAU);
+    ctx.arc(x, y, r * 1.05, 0, TAU);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(String(name || 'anon').slice(0, 18), x, y - r - 8 * DPR);
+    if (rel !== 0) {
+      ctx.strokeStyle = rel > 0 ? 'rgba(110,255,170,0.95)' : 'rgba(255,110,140,0.95)';
+      ctx.lineWidth = 4 * DPR;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.16, 0, TAU);
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
@@ -758,16 +760,20 @@
   }
 
   function drawSelfNick() {
+    if (!NET_ENABLED) return;
     const x = W / 2;
     const y = H / 2;
     const r = player.r;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(120,255,190,0.96)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 5 * DPR;
     ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 10 * DPR);
+    ctx.strokeText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 12 * DPR);
+    ctx.fillStyle = 'rgba(120,255,190,0.98)';
+    ctx.fillText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 12 * DPR);
     ctx.restore();
   }
 
@@ -775,7 +781,6 @@
     if (!NET_ENABLED) return;
 
     const eatF = 1.12;
-
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -789,36 +794,30 @@
       if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
 
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
+      const labelY = y - p.r - 14 * DPR;
 
-      ctx.font = `${Math.max(12 * DPR, p.r * 0.42)}px system-ui,Segoe UI,Arial`;
+      ctx.fillStyle = p.color || '#79C8FF';
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(6 * DPR, p.r * 0.34), 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.lineWidth = 5 * DPR;
+      ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+      ctx.font = `${Math.max(12 * DPR, p.r * 0.44)}px system-ui,Segoe UI,Arial`;
+      const nm = String(p.name || 'anon').slice(0,18);
+      ctx.strokeText(nm, x, labelY);
+
       ctx.fillStyle = rel > 0
         ? 'rgba(110,255,170,0.98)'
         : rel < 0
         ? 'rgba(255,120,145,0.98)'
-        : 'rgba(255,255,255,0.95)';
-
-      ctx.fillText(String(p.name || 'anon').slice(0,18), x, y - p.r - 10 * DPR);
+        : (p.color || 'rgba(255,255,255,0.96)');
+      ctx.fillText(nm, x, labelY);
     }
 
     ctx.restore();
-  }
-
-  function netRenderMiniList() {
-    if (netMiniEl) netMiniEl.style.display = NET_ENABLED ? 'block' : 'none';
-
-    if (netCountEl) netCountEl.textContent = String(1 + NET.players.size);
-    if (netRoomLabelEl) netRoomLabelEl.textContent = `room ${NET.room}`;
-
-    if (!netPlayersListEl) return;
-
-    const rows = [];
-    rows.push(`🟢 ты: ${(ONLINE.name || 'anon').slice(0,18)}`);
-
-    for (const p of NET.players.values()) {
-      rows.push(`⚪ ${String(p.name || 'anon').slice(0,18)}`);
-    }
-
-    netPlayersListEl.innerHTML = rows.join('<br>');
   }
 
   function onlineInitUI() {
@@ -827,12 +826,19 @@
         ? `room ${NET_ROOM} • seed ${SEED}`
         : `seed ${SEED}`;
     }
-
     if (onlinePanelEl) onlinePanelEl.style.display = 'none';
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
 
     syncNickInputs();
     netRenderMiniList();
+
+    if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
+    if (onlineNameEl) {
+      onlineNameEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') onlineSetName(onlineNameEl.value);
+      });
+    }
+    if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
 
     if (nickGateRandEl) {
       nickGateRandEl.onclick = () => {
@@ -842,23 +848,13 @@
     }
 
     if (nickGateOkEl) nickGateOkEl.onclick = () => applyNickFromGate();
-
     if (nickGateInputEl) {
       nickGateInputEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') applyNickFromGate();
       });
     }
 
-    if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
-    if (onlineNameEl) {
-      onlineNameEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') onlineSetName(onlineNameEl.value);
-      });
-    }
-
-    if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
-
-    openNickGate(false);
+    openNickGate(NET_ENABLED);
   }
 
   function onlineRenderTop() {
