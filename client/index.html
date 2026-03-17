@@ -3,11 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Void Run — online survival arena</title>
-  <meta name="description" content="Void Run — тёмная онлайн survival arena с ростом шара, минами, реликвиями и экстракцией." />
-  <meta name="robots" content="index,follow" />
-  <meta property="og:title" content="Void Run — online survival arena" />
-  <meta property="og:description" content="Grow, hunt, survive, extract." />
+  <title>Void Run Prototype</title>
   <style>
     html, body { margin:0; padding:0; height:100%; background:#070A12; overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #wrap { position:fixed; inset:0; display:block; }
@@ -93,154 +89,67 @@
       <div class="pill"><span>🗿</span> <b id="relics">0/3</b></div>
       <div class="pill"><span>🚪</span> <b id="extract">—</b></div>
     <div class="pill"><span>❤️</span> <b id="hp">3</b></div>
-    <div class="pill"><span>🛡️</span> <b id="shield">0</b></div>
     <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
     <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
-	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
-	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
     <div class="spacer"></div>
     <button class="btn" id="pause">Пауза</button>
     <button class="btn" id="restart">Заново</button>
   </div>
 
-  
-<div class="hint">
-  <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
-  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
-</div>
-
-<div id="netMini" style="
-  position:fixed; left:16px; top:86px; z-index:9998;
-  min-width:200px; max-width:260px;
-  padding:10px 12px;
-  border-radius:16px;
-  background:rgba(10,14,28,.52);
-  border:1px solid rgba(90,140,255,.15);
-  color:#EAF1FF;
-  backdrop-filter: blur(12px);
-  box-shadow:0 12px 40px rgba(0,0,0,.30);
-">
-  <div style="font-weight:800;">🌐 Онлайн: <span id="netCount">1</span></div>
-  <div id="netRoomLabel" style="font-size:12px; opacity:.72; margin-top:4px;">room daily</div>
-  <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
-    ты один
-  </div>
-  <div style="display:flex; gap:8px; margin-top:10px;">
-    <button class="btn" id="netRenameBtn" style="padding:8px 12px; font-size:12px;">Ник</button>
-  </div>
-</div>
-
-<div id="onlinePanel" style="
-  position:fixed; right:16px; top:86px; z-index:9999;
-  width:280px; padding:12px;
-  border-radius:16px; background:rgba(10, 14, 28, .62);
-  border:1px solid rgba(90, 140, 255, .15);
-  color:#EAF1FF; backdrop-filter: blur(12px);
-  box-shadow: 0 20px 70px rgba(0,0,0,.45);
-  pointer-events:auto;
-  display:none;
-">
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-    <div style="font-weight:800;">🌐 TOP дня</div>
-    <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
-  </div>
-
-  <div style="margin-top:10px; display:flex; gap:8px;">
-    <input id="onlineName" maxlength="18" placeholder="Ник" style="
-      flex:1; padding:8px 10px; border-radius:12px;
-      border:1px solid rgba(255,255,255,0.14);
-      background:rgba(0,0,0,0.25); color:#fff; outline:none;
-    "/>
-    <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
-    <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
-  </div>
-
-  <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
-    Призрак дня: загрузка…
-  </div>
-
-  <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
-
-  <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Отправка результата — автоматически при поражении.
-  </div>
-</div>
-
-<div id="nickGate" style="
-  position:fixed; inset:0; z-index:10020;
-  display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.72); backdrop-filter: blur(8px);
-">
-  <div style="
-    width:min(92vw,420px);
-    border-radius:24px;
-    padding:22px;
-    background:rgba(8,12,24,.92);
-    border:1px solid rgba(90,140,255,.18);
-    box-shadow:0 20px 80px rgba(0,0,0,.45);
-    color:#EAF1FF;
+  <div class="hint">
+    <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
+    <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим.  🟡 корм/монеты  🔴 мины  🟣 вирус  🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)
+  <div id="onlinePanel" style="
+    position:fixed; right:16px; top:86px; z-index:9999;
+    width:280px; padding:12px;
+    border-radius:16px; background:rgba(10, 14, 28, .62);
+    border:1px solid rgba(90, 140, 255, .15);
+    color:#EAF1FF; backdrop-filter: blur(12px);
+    box-shadow: 0 20px 70px rgba(0,0,0,.45);
+    pointer-events:auto;
   ">
-    <div style="font-size:28px; font-weight:900; margin-bottom:10px;">Вход в арену</div>
-    <div style="opacity:.82; line-height:1.45; margin-bottom:14px;">
-      Введи ник. Он сохранится локально и будет использоваться при следующем входе.
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <div style="font-weight:800;">🌐 TOP дня</div>
+      <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
     </div>
 
-    <input id="nickGateInput" maxlength="18" placeholder="Твой ник" style="
-      width:100%; box-sizing:border-box;
-      padding:14px 16px;
-      border-radius:14px;
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(0,0,0,.28);
-      color:#fff; outline:none; font-size:18px;
-    " />
-
-    <div style="display:flex; gap:10px; margin-top:14px;">
-      <button class="btn" id="nickGateOk" style="flex:1;">Войти</button>
-      <button class="btn" id="nickGateRand" style="padding:0 18px;">🎲</button>
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <input id="onlineName" maxlength="18" placeholder="Ник" style="
+        flex:1; padding:8px 10px; border-radius:12px;
+        border:1px solid rgba(255,255,255,0.14);
+        background:rgba(0,0,0,0.25); color:#fff; outline:none;
+      "/>
+      <button class="btn" id="onlineSave" style="padding:8px 12px; font-size:12px;">OK</button>
+      <button class="btn" id="onlineRefresh" style="padding:8px 12px; font-size:12px;">↻</button>
     </div>
-  </div>
-</div>
 
-<div id="supportModal" style="
-  position:fixed; inset:0; z-index:10015;
-  display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.68); backdrop-filter: blur(8px);
-">
-  <div style="
-    width:min(92vw,440px);
-    border-radius:24px;
-    padding:22px;
-    background:rgba(8,12,24,.94);
-    border:1px solid rgba(90,140,255,.18);
-    box-shadow:0 20px 80px rgba(0,0,0,.45);
-    color:#EAF1FF;
-  ">
-    <div style="font-size:26px; font-weight:900; margin-bottom:8px;">Поддержать Void Run</div>
-    <div id="supportSubtitle" style="opacity:.84; line-height:1.45; margin-bottom:14px;">
-      Founder Pack и донат уже подготовлены в интерфейсе. Вставь свои реальные ссылки в SUPPORT_LINKS.
+    <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
+      Призрак дня: загрузка…
     </div>
-    <div style="display:flex; gap:10px; margin-top:14px;">
-      <button class="btn" id="supportGo" style="flex:1;">Открыть</button>
-      <button class="btn" id="supportClose" style="padding:0 18px;">Закрыть</button>
+
+    <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+
+    <div style="margin-top:10px; font-size:11px; opacity:.65;">
+      Отправка результата — автоматически при поражении.
     </div>
   </div>
 </div>
+  </div>
 
-<div class="centerMsg" id="overlay">
-  <div class="box">
-    <h2>Void Run — бесконечный мир</h2>
-    <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
-    <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
-    <p>Нажми <b>Старт</b>. Сетевой режим — по одному адресу с одинаковыми room и seed.</p>
-    <div class="row">
-      <button class="btn" id="start">Старт</button>
+  <div class="centerMsg" id="overlay">
+    <div class="box">
+      <h2>Void Run — бесконечный мир</h2>
+      <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
+      <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
+      <p>Нажми <b>Старт</b>. Потом можно деплоить на Cloudflare Pages.</p>
+      <div class="row">
+        <button class="btn" id="start">Старт</button>
+      </div>
     </div>
   </div>
-</div>
-
 <script>
 (() => {
 
@@ -446,10 +355,7 @@
   const elCoins = document.getElementById('coins');
   const elMass = document.getElementById('mass');
   const elScore = document.getElementById('score');
-  const elRelics = document.getElementById('relics');
-  const elExtract = document.getElementById('extract');
   const elHP = document.getElementById('hp');
-  const elShield = document.getElementById('shield');
   const elLv = document.getElementById('lv');
   const elBest = document.getElementById('best');
   const btnRestart = document.getElementById('restart');
@@ -464,22 +370,6 @@
   const onlineGhostEl = document.getElementById('onlineGhost');
   const onlineTopEl = document.getElementById('onlineTop');
   const onlinePanelEl = document.getElementById('onlinePanel');
-
-  const nickGateEl = document.getElementById('nickGate');
-  const nickGateInputEl = document.getElementById('nickGateInput');
-  const nickGateOkEl = document.getElementById('nickGateOk');
-  const nickGateRandEl = document.getElementById('nickGateRand');
-
-  const netCountEl = document.getElementById('netCount');
-  const netRoomLabelEl = document.getElementById('netRoomLabel');
-  const netPlayersListEl = document.getElementById('netPlayersList');
-const netRenameBtnEl = document.getElementById('netRenameBtn');
-  const supportModalEl = document.getElementById('supportModal');
-  const supportSubtitleEl = document.getElementById('supportSubtitle');
-  const supportGoEl = document.getElementById('supportGo');
-  const supportCloseEl = document.getElementById('supportClose');
-  const btnFounder = document.getElementById('btnFounder');
-  const btnDonate = document.getElementById('btnDonate');
 
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
@@ -557,30 +447,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const VIEW_PAD = 1400;                             // generate slightly beyond screen
   const MAX_CHUNKS_KEEP = 140;                       // LRU cap (light)
 
-  const NET_ENABLED = new URLSearchParams(location.search).get('net') !== '0';
-  const NET_ROOM = (new URLSearchParams(location.search).get('room') || 'daily').trim().slice(0, 24) || 'daily';
-
-  const SUPPORT_LINKS = {
-    founder: localStorage.getItem('voidrun_founder_url') || '',
-    donate: localStorage.getItem('voidrun_donate_url') || ''
-  };
-
-  const NET = {
-    ws: null,
-    connected: false,
-    id: null,
-    room: NET_ROOM,
-    players: new Map(),
-    sendAcc: 0,
-    spawn: null,
-    color: '#79C8FF',
-    onlineCount: 1,
-    reconnectTimer: null,
-    joinSent: false,
-    heartbeatAcc: 0,
-    roster: [],
-  };
-
   // ==========================
   // Online leaderboard + ghost (Cloudflare Pages Functions)
   // ==========================
@@ -601,513 +467,22 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (!n) return;
     ONLINE.name = n;
     localStorage.setItem('newsnake_name', n);
-    netSend({ type: 'rename', name: n });
-    netHello(true);
-    syncNickInputs();
-    netRenderMiniList();
-  }
-
-  function makeRandomNick() {
-    const a = ['Void','Dark','Nova','Ghost','Lava','Toxic','Ice','Nebula','Orbit','Pulse'];
-    const b = ['Fox','Wolf','Ray','Orb','Snake','Drift','Core','Spark','Shade','Byte'];
-    return `${a[(Math.random()*a.length)|0]}${b[(Math.random()*b.length)|0]}${(Math.random()*90+10)|0}`.slice(0,18);
-  }
-
-  function syncNickInputs() {
-    if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
-    if (nickGateInputEl) nickGateInputEl.value = ONLINE.name || '';
-  }
-
-  function openNickGate(force = false) {
-    if (!NET_ENABLED && !force) return;
-    if (!nickGateEl) return;
-    if (force || !ONLINE.name) {
-      nickGateEl.style.display = 'flex';
-      syncNickInputs();
-      setTimeout(() => { if (nickGateInputEl) nickGateInputEl.focus(); }, 30);
-    } else {
-      nickGateEl.style.display = 'none';
-    }
-  }
-
-  function closeNickGate() {
-    if (nickGateEl) nickGateEl.style.display = 'none';
-  }
-
-  function applyNickFromGate() {
-    let v = (nickGateInputEl?.value || '').trim();
-    if (!v) v = makeRandomNick();
-    onlineSetName(v);
-    closeNickGate();
-  }
-  function openSupport(kind='founder') {
-    if (!supportModalEl) return;
-    const url = kind === 'donate' ? SUPPORT_LINKS.donate : SUPPORT_LINKS.founder;
-    if (supportSubtitleEl) {
-      supportSubtitleEl.textContent = kind === 'donate'
-        ? 'Кнопка доната готова. Вставь свою реальную ссылку в SUPPORT_LINKS.donate.'
-        : 'Founder Pack готов. Вставь свою реальную ссылку в SUPPORT_LINKS.founder.';
-    }
-    supportModalEl.dataset.kind = kind;
-    supportModalEl.style.display = 'flex';
-    if (supportGoEl) supportGoEl.textContent = url ? 'Открыть ссылку' : 'Ссылка не задана';
-  }
-
-  function closeSupport() {
-    if (supportModalEl) supportModalEl.style.display = 'none';
-  }
-
-  function goSupport() {
-    const kind = supportModalEl?.dataset.kind === 'donate' ? 'donate' : 'founder';
-    const url = kind === 'donate' ? SUPPORT_LINKS.donate : SUPPORT_LINKS.founder;
-    if (!url) {
-      alert(kind === 'donate'
-        ? 'Вставь свою ссылку в SUPPORT_LINKS.donate'
-        : 'Вставь свою ссылку в SUPPORT_LINKS.founder');
-      return;
-    }
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-
-
-  function netRenderMiniList() {
-    const count = NET.onlineCount || 1;
-    if (netCountEl) netCountEl.textContent = String(count);
-    if (netRoomLabelEl) netRoomLabelEl.textContent = `room ${NET.room}`;
-
-    if (!netPlayersListEl) return;
-
-    const rows = [];
-    const roster = Array.isArray(NET.roster) && NET.roster.length
-      ? NET.roster
-      : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }];
-
-    for (const item of roster) {
-      const self = item.self || item.id === NET.id;
-      rows.push(`${self ? '🟢' : '⚪'} ${self ? 'ты' : String(item.name || 'anon').slice(0,18)}${self ? `: ${String(ONLINE.name || item.name || 'anon').slice(0,18)}` : ''}`);
-    }
-
-    netPlayersListEl.innerHTML = rows.join('<br>');
-  }
-
-  // ==========================
-  // Realtime network (Node.js + ws)
-  // ==========================
-  function netWsUrl() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${location.host}/ws`;
-  }
-
-  function netSend(obj) {
-    if (!NET_ENABLED) return;
-    if (!NET.ws || NET.ws.readyState !== 1) return;
-    NET.ws.send(JSON.stringify(obj));
-  }
-
-  function netHello(force = false) {
-    if (!NET_ENABLED) return;
-    if (!NET.ws || NET.ws.readyState !== 1) return;
-    if (!ONLINE.name) return;
-    if (NET.joinSent && !force) return;
-
-    netSend({
-      type: 'hello',
-      room: NET.room,
-      name: ONLINE.name || 'anon',
-    });
-
-    NET.joinSent = true;
-  }
-
-  function netConnect() {
-    if (!NET_ENABLED) return;
-    if (NET.ws && (NET.ws.readyState === 0 || NET.ws.readyState === 1)) return;
-
-    const ws = new WebSocket(netWsUrl());
-    NET.ws = ws;
-
-    ws.onopen = () => {
-      NET.connected = true;
-      NET.sendAcc = 0;
-      NET.joinSent = false;
-      netHello();
-      netRenderMiniList();
-    };
-
-    ws.onmessage = (ev) => {
-      let msg = null;
-      try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      if (!msg) return;
-
-      if (msg.type === 'welcome') {
-        NET.id = msg.id;
-        NET.color = msg.color || NET.color;
-        NET.spawn = msg.spawn || { x: 0, y: 0 };
-        NET.roster = [{ id: NET.id, name: ONLINE.name || 'anon', self: true }];
-        NET.onlineCount = 1;
-        netRenderMiniList();
-        return;
-      }
-
-      if (msg.type === 'snapshot') {
-        NET.players.clear();
-
-        if (Array.isArray(msg.players)) {
-          for (const p of msg.players) {
-            if (!p) continue;
-
-            if (p.id === NET.id) {
-              player.hp = Number.isFinite(p.hp) ? p.hp : player.hp;
-              player.r = Number.isFinite(p.r) ? p.r : player.r;
-              player.score = Number.isFinite(p.score) ? p.score : player.score;
-
-              if (msg.selfSpawn && NET.awaitingRespawn) {
-                NET.spawn = msg.selfSpawn;
-              }
-
-              if (p.alive === false && state === 'RUN') {
-                state = 'DEAD';
-                overlay.style.display = 'flex';
-                overlay.querySelector('h2').textContent = 'Тебя схавали ☠️';
-                overlay.querySelectorAll('p')[0].innerHTML = `Счёт: <b>${player.score|0}</b> • Монеты: <b>${player.coins}</b>`;
-                overlay.querySelectorAll('p')[1].innerHTML = `Нажми <b>Старт</b>, чтобы быстро респавниться в новой точке.`;
-                overlay.querySelectorAll('p')[2].innerHTML = `Сервер теперь решает PvP: кто кого съел.`;
-                overlay.querySelector('#start').textContent = 'Респавн';
-              }
-              continue;
-            }
-
-            NET.players.set(p.id, p);
-          }
-        }
-
-        NET.onlineCount = Number(msg.count) || (1 + NET.players.size);
-        NET.roster = Array.isArray(msg.roster)
-          ? msg.roster.map(p => ({ ...p, self: p.id === NET.id }))
-          : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }, ...Array.from(NET.players.values()).map(p => ({ id: p.id, name: p.name }))];
-
-        netRenderMiniList();
-        updateHUD();
-        return;
-      }
-
-      if (msg.type === 'respawned') {
-        NET.spawn = msg.spawn || NET.spawn || { x: 0, y: 0 };
-        NET.awaitingRespawn = false;
-        overlay.style.display = 'none';
-        state = 'RUN';
-        resetGame();
-        return;
-      }
-
-      if (msg.type === 'pvp') {
-        if (msg.role === 'victim') {
-          state = 'DEAD';
-          overlay.style.display = 'flex';
-          overlay.querySelector('h2').textContent = 'Тебя схавали ☠️';
-          overlay.querySelectorAll('p')[0].innerHTML = `Тебя съел: <b>${String(msg.killerName || 'игрок').slice(0,18)}</b>`;
-          overlay.querySelectorAll('p')[1].innerHTML = `Нажми <b>Старт</b>, чтобы сразу респавниться в новой точке.`;
-          overlay.querySelectorAll('p')[2].innerHTML = `Респавн идёт от сервера.`;
-          overlay.querySelector('#start').textContent = 'Респавн';
-        } else if (msg.role === 'attacker') {
-          player.r = msg.r ?? player.r;
-          player.score = msg.score ?? player.score;
-          updateHUD();
-        }
-        return;
-      }
-    };
-
-    ws.onclose = () => {
-      NET.connected = false;
-      NET.joinSent = false;
-      NET.players.clear();
-      NET.onlineCount = 1;
-      NET.roster = [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }];
-      netRenderMiniList();
-
-      clearTimeout(NET.reconnectTimer);
-      NET.reconnectTimer = setTimeout(() => {
-        netConnect();
-      }, 1500);
-    };
-
-    ws.onerror = () => {};
-  }
-
-  function netHeartbeatTick(dt) {
-    if (!NET_ENABLED) return;
-    if (!NET.connected) return;
-
-    NET.heartbeatAcc += dt;
-    if (NET.heartbeatAcc < 2.0) return;
-    NET.heartbeatAcc = 0;
-
-    netSend({
-      type: 'ping',
-      room: NET.room,
-      name: ONLINE.name || 'anon',
-      alive: state === 'RUN',
-    });
-  }
-
-  function netTick(dt) {
-    if (!NET_ENABLED) return;
-    if (!NET.connected) return;
-
-    NET.sendAcc += dt;
-    if (NET.sendAcc < 0.06) return;
-    NET.sendAcc = 0;
-
-    netSend({
-      type: 'state',
-      x: Math.round(player.x),
-      y: Math.round(player.y),
-      r: +player.r.toFixed(2),
-      hp: player.hp | 0,
-      score: player.score | 0,
-      alive: state === 'RUN',
-      extracted: !!player.extracted,
-    });
-  }
-
-  function drawNetPlayer(x, y, r, name, color, rel) {
-    ctx.save();
-
-    const glow = ctx.createRadialGradient(x, y, 1, x, y, r * 2.9);
-    glow.addColorStop(0, `${color}55`);
-    glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 2.9, 0, TAU);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = 'rgba(0,0,0,0.40)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + r * 0.9, r * 1.0, r * 0.55, 0, 0, TAU);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    const g = ctx.createLinearGradient(x-r, y-r, x+r, y+r);
-    g.addColorStop(0, '#FFFFFF');
-    g.addColorStop(0.18, color || '#79C8FF');
-    g.addColorStop(1, 'rgba(25,35,70,1)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
-
-    ctx.strokeStyle = color || '#79C8FF';
-    ctx.lineWidth = 3 * DPR;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 1.05, 0, TAU);
-    ctx.stroke();
-
-    if (rel !== 0) {
-      ctx.strokeStyle = rel > 0 ? 'rgba(110,255,170,0.95)' : 'rgba(255,110,140,0.95)';
-      ctx.lineWidth = 4 * DPR;
-      ctx.beginPath();
-      ctx.arc(x, y, r * 1.16, 0, TAU);
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-
-  function netDrawPlayers(sx, sy) {
-    if (!NET_ENABLED) return;
-    if (!NET.players.size) return;
-
-    const eatF = 1.12;
-
-    for (const p of NET.players.values()) {
-      if (!p.alive) continue;
-
-      const x = sx(p.x);
-      const y = sy(p.y);
-
-      if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
-
-      const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      drawNetPlayer(x, y, p.r, p.name, p.color, rel);
-    }
-  }
-
-  function drawSelfNick() {
-    if (!NET_ENABLED) return;
-    const x = W / 2;
-    const y = H / 2;
-    const r = player.r;
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.lineWidth = 5 * DPR;
-    ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.strokeText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 12 * DPR);
-    ctx.fillStyle = 'rgba(120,255,190,0.98)';
-    ctx.fillText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 12 * DPR);
-    ctx.restore();
-  }
-
-  function drawNetLabelsOnTop(sx, sy) {
-    if (!NET_ENABLED) return;
-
-    const eatF = 1.12;
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-
-    for (const p of NET.players.values()) {
-      if (!p.alive) continue;
-
-      const x = sx(p.x);
-      const y = sy(p.y);
-
-      if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
-
-      const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      const labelY = y - p.r - 14 * DPR;
-
-      ctx.fillStyle = p.color || '#79C8FF';
-      ctx.globalAlpha = 0.55;
-      ctx.beginPath();
-      ctx.arc(x, y, Math.max(6 * DPR, p.r * 0.34), 0, TAU);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      ctx.lineWidth = 5 * DPR;
-      ctx.strokeStyle = 'rgba(0,0,0,0.82)';
-      ctx.font = `${Math.max(12 * DPR, p.r * 0.44)}px system-ui,Segoe UI,Arial`;
-      const nm = String(p.name || 'anon').slice(0,18);
-      ctx.strokeText(nm, x, labelY);
-
-      ctx.fillStyle = rel > 0
-        ? 'rgba(110,255,170,0.98)'
-        : rel < 0
-        ? 'rgba(255,120,145,0.98)'
-        : (p.color || 'rgba(255,255,255,0.96)');
-      ctx.fillText(nm, x, labelY);
-    }
-
-    ctx.restore();
-  }
-
-
-  function drawNetEdgeHints(sx, sy) {
-    if (!NET_ENABLED) return;
-    if (!NET.players.size) return;
-
-    const eatF = 1.12;
-    const pad = 34 * DPR;
-    const cx = W / 2;
-    const cy = H / 2;
-
-    ctx.save();
-
-    for (const p of NET.players.values()) {
-      if (!p.alive) continue;
-
-      const x = sx(p.x);
-      const y = sy(p.y);
-
-      if (x >= pad && x <= W - pad && y >= pad && y <= H - pad) continue;
-
-      const vx = x - cx;
-      const vy = y - cy;
-      if (!vx && !vy) continue;
-
-      const kx = vx > 0 ? (W - pad - cx) / vx : (pad - cx) / vx;
-      const ky = vy > 0 ? (H - pad - cy) / vy : (pad - cy) / vy;
-      const k = Math.min(Math.abs(kx), Math.abs(ky));
-      if (!isFinite(k) || k <= 0) continue;
-
-      const ex = cx + vx * k;
-      const ey = cy + vy * k;
-
-      const dx = p.x - player.x;
-      const dy = p.y - player.y;
-      const worldDist = Math.hypot(dx, dy);
-
-      const near = 1 - clamp(worldDist / 2600, 0, 1);
-      const alpha = 0.16 + near * 0.76;
-      const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      const baseColor = rel > 0
-        ? 'rgba(110,255,170,1)'
-        : rel < 0
-        ? 'rgba(255,120,145,1)'
-        : (p.color || 'rgba(121,200,255,1)');
-
-      const ang = Math.atan2(vy, vx);
-      const tx = ex - Math.cos(ang) * (16 * DPR);
-      const ty = ey - Math.sin(ang) * (16 * DPR);
-      const nm = String(p.name || 'anon').slice(0, 18);
-
-      ctx.globalAlpha = alpha * 0.22;
-      ctx.fillStyle = baseColor;
-      ctx.beginPath();
-      ctx.arc(ex, ey, (10 + near * 10) * DPR, 0, TAU);
-      ctx.fill();
-
-      ctx.globalAlpha = alpha * 0.95;
-      ctx.strokeStyle = 'rgba(0,0,0,0.78)';
-      ctx.lineWidth = 5 * DPR;
-      ctx.font = `${Math.max(11 * DPR, (12 + near * 5) * DPR)}px system-ui,Segoe UI,Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.strokeText(nm, tx, ty);
-
-      ctx.fillStyle = baseColor;
-      ctx.fillText(nm, tx, ty);
-    }
-
-    ctx.restore();
   }
 
   function onlineInitUI() {
-    if (onlineSeedEl) {
-      onlineSeedEl.textContent = NET_ENABLED
-        ? `room ${NET_ROOM} • seed ${SEED}`
-        : `seed ${SEED}`;
-    }
-    if (onlinePanelEl) onlinePanelEl.style.display = 'none';
-    if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
+    if (onlineSeedEl) onlineSeedEl.textContent = `seed ${SEED}`;
+    if (onlineNameEl) onlineNameEl.value = ONLINE.name || '';
 
-    syncNickInputs();
-    netRenderMiniList();
-
-    if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
-    if (onlineNameEl) {
-      onlineNameEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') onlineSetName(onlineNameEl.value);
-      });
-    }
-    if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
-
-    if (nickGateRandEl) {
-      nickGateRandEl.onclick = () => {
-        const v = makeRandomNick();
-        if (nickGateInputEl) nickGateInputEl.value = v;
+    if (onlineGhostEl) {
+      onlineGhostEl.checked = ONLINE.showGhost;
+      onlineGhostEl.onchange = () => {
+        ONLINE.showGhost = !!onlineGhostEl.checked;
+        localStorage.setItem('newsnake_showGhost', ONLINE.showGhost ? '1' : '0');
       };
     }
-
-    if (netRenameBtnEl) netRenameBtnEl.onclick = () => openNickGate(true);
-    if (btnFounder) btnFounder.onclick = () => openSupport('founder');
-    if (btnDonate) btnDonate.onclick = () => openSupport('donate');
-    if (supportGoEl) supportGoEl.onclick = () => goSupport();
-    if (supportCloseEl) supportCloseEl.onclick = () => closeSupport();
-    if (supportModalEl) supportModalEl.addEventListener('click', (e) => { if (e.target === supportModalEl) closeSupport(); });
-
-    if (nickGateOkEl) nickGateOkEl.onclick = () => applyNickFromGate();
-    if (nickGateInputEl) {
-      nickGateInputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') applyNickFromGate();
-      });
-    }
-
-    if (NET_ENABLED) openNickGate(true);
+    if (onlineSaveBtn) onlineSaveBtn.onclick = () => onlineSetName(onlineNameEl.value);
+    if (onlineNameEl) onlineNameEl.addEventListener('keydown', (e)=>{ if (e.key==='Enter') onlineSetName(onlineNameEl.value); });
+    if (onlineRefreshBtn) onlineRefreshBtn.onclick = () => onlineRefresh();
   }
 
   function onlineRenderTop() {
@@ -1305,8 +680,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const coins = [];
     const mines = [];
     const torches = [];
-    const heals = [];
-    const shields = [];
     const mimics = [];
     const viruses = [];
     const cells = [];
@@ -1363,22 +736,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const y = baseY + rnd()*CHUNK;
       const id = key + ':t:0';
       torches.push({x,y,r:14,id});
-    }
-
-    // heal orb
-    const healP = (biome === 'ice') ? 0.26 : (biome === 'nebula' ? 0.18 : 0.14);
-    if (level >= 2 && rnd() < healP) {
-      const x = baseX + rnd()*CHUNK;
-      const y = baseY + rnd()*CHUNK;
-      heals.push({x,y,r:13,id:key + ':heal:0',phase:rnd()*TAU});
-    }
-
-    // shield orb
-    const shieldP = (biome === 'nebula') ? 0.16 : (biome === 'ice' ? 0.12 : 0.09);
-    if (level >= 3 && rnd() < shieldP) {
-      const x = baseX + rnd()*CHUNK;
-      const y = baseY + rnd()*CHUNK;
-      shields.push({x,y,r:13,id:key + ':shield:0',phase:rnd()*TAU});
     }
 
     // mimic coin (trap)
@@ -1461,7 +818,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       relics.push({ id: key + ':rel:0', x, y, r, type });
     }
 
-c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cells, hunters, slimes, t: tickCounter};
+c = {biome, coins, mines, torches, relics, mimics, viruses, cells, hunters, slimes, t: tickCounter};
     chunkMap.set(key, c);
 
     if (chunkMap.size > MAX_CHUNKS_KEEP) {
@@ -1482,9 +839,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     baseR: 18,
     r: 18,
     hp: 3,
-    maxHp: 3,
-    shieldHits: 0,
-    shieldTime: 0,
     coins: 0,
     nearMiss: 0,
     dash: 0,
@@ -1528,7 +882,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   const swarms = []; // list of drones {x,y,vx,vy,r,kind,hue,ttl}
   let swarmCd = 6.0;
 
-  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0, grace:0, hitCd:0, retreat:0};
+  const boss = {active:false, x:0, y:0, r:240, vx:0, vy:0, ttl:0, cd:18.0, phase:0, warmup:0, retreatT:0, hitCd:0, aliveRewardGiven:false};
 
 
   // ==========================
@@ -1543,34 +897,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     shakeA = Math.max(shakeA, a);
     shakeT = Math.max(shakeT, t);
   }
-  function resetBossAndSwarms() {
-    swarms.length = 0;
-    swarmCd = 6.0;
-    boss.active = false;
-    boss.x = 0; boss.y = 0;
-    boss.vx = 0; boss.vy = 0;
-    boss.ttl = 0;
-    boss.cd = 18.0;
-    boss.phase = 0;
-    boss.grace = 0;
-    boss.hitCd = 0;
-    boss.retreat = 0;
-  }
-
-  function resetTransientFX() {
-    fx.length = 0;
-    pellets.length = 0;
-    shakeT = 0;
-    shakeA = 0;
-  }
-
-  function localRandomSpawn() {
-    return {
-      x: Math.round((Math.random() - 0.5) * 1200),
-      y: Math.round((Math.random() - 0.5) * 1200),
-    };
-  }
-
 
   function spawnBurst(wx, wy, hue, count=14, baseSpeed=220) {
     for (let i=0;i<count;i++){
@@ -1641,12 +967,9 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 	AudioFX.click();
   }
   function resetGame() {
-    const spawn = (NET_ENABLED && NET.spawn) ? NET.spawn : localRandomSpawn();
-    player.x = spawn.x; player.y = spawn.y;
+    player.x = 0; player.y = 0;
     player.vx = 0; player.vy = 0;
-    player.hp = player.maxHp = 3;
-    player.shieldHits = 0;
-    player.shieldTime = 0;
+    player.hp = 3;
     player.coins = 0;
     player.nearMiss = 0;
     player.baseR = 18;
@@ -1656,7 +979,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     player.combo = 0;
     player.comboTimer = 0;
     player.torchTime = 0;
-    player.invulnTime = 1.1;
+    player.invulnTime = 0;
+
 
     player.relics = [];
     player.mods = { beam:0, aura:0, magnet:0, echo:0, antiSlow:0 };
@@ -1671,18 +995,27 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     timeSurv = 0;
     level = 1;
 
+    boss.active = false;
+    boss.ttl = 0;
+    boss.vx = 0;
+    boss.vy = 0;
+    boss.warmup = 0;
+    boss.retreatT = 0;
+    boss.hitCd = 0;
+    boss.aliveRewardGiven = false;
+
+    fx.length = 0;
+    pellets.length = 0;
+    shakeT = 0;
+    shakeA = 0;
+
     chunkMap.clear();
     collected.clear();
     dashReady = true;
     dashCd = 0;
 
-    resetBossAndSwarms();
-    resetTransientFX();
-
+    // place pointer in center if not moved
     if (!hasPointer) { mouseX = (W/DPR/2)*DPR; mouseY = (H/DPR/2)*DPR; }
-
-    cam.x = player.x;
-    cam.y = player.y;
 
     onlineGhostReset();
     updateHUD();
@@ -1691,10 +1024,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   btnRestart.addEventListener('click', ()=>{
     overlay.style.display = 'none';
     state = 'RUN';
-    if (NET_ENABLED) {
-      NET.awaitingRespawn = true;
-      netSend({ type:'respawn', room: NET.room, name: ONLINE.name || 'anon' });
-    }
     resetGame();
   });
   btnPause.addEventListener('click', ()=>{
@@ -1703,16 +1032,13 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
 
   btnStart.addEventListener('click', ()=>{
+    // If we are paused -> resume, do NOT reset.
     if (state === 'PAUSE') {
       togglePause();
       return;
     }
     overlay.style.display = 'none';
     state = 'RUN';
-    if (NET_ENABLED) {
-      NET.awaitingRespawn = true;
-      netSend({ type:'respawn', room: NET.room, name: ONLINE.name || 'anon' });
-    }
     resetGame();
   });
 
@@ -1745,16 +1071,9 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     elT.textContent = timeSurv.toFixed(1) + 's';
     elCoins.textContent = player.coins;
     elHP.textContent = player.hp;
-    if (elShield) elShield.textContent = player.shieldHits > 0 ? `${player.shieldHits}` : '0';
     elLv.textContent = level;
     elScore.textContent = player.score | 0;
     elMass.textContent = (player.r / player.baseR).toFixed(2) + 'x';
-    if (elRelics) elRelics.textContent = `${player.relics.length}/${RELIC_GOAL}`;
-    if (elExtract) {
-      if (player.extracted) elExtract.textContent = 'DONE';
-      else if (portal) elExtract.textContent = 'GO';
-      else elExtract.textContent = '—';
-    }
   }
 
   
@@ -1870,23 +1189,23 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     const dist = 3000 + Math.random()*1200;
     boss.x = player.x + Math.cos(a)*dist;
     boss.y = player.y + Math.sin(a)*dist;
-    boss.r = clamp(Math.max(220, player.r * 1.95), 220, 320);
+    boss.r = Math.max(220, player.r * 2.0);
     boss.vx = 0;
     boss.vy = 0;
-    boss.ttl = 14.0;
+    boss.ttl = 13.5;
     boss.phase = Math.random()*TAU;
-    boss.grace = 1.7;
+    boss.warmup = 2.2;
+    boss.retreatT = 0;
     boss.hitCd = 0;
-    boss.retreat = 0;
+    boss.aliveRewardGiven = false;
     boss.active = true;
-    kickShake(7, 0.12);
+    kickShake(7, 0.10);
   }
 
   function updateBoss(dt) {
     boss.cd = Math.max(0, boss.cd - dt);
     if (!boss.active && level >= 5 && boss.cd <= 0) {
-      // spawn boss sometimes (wow moment), but much fairer
-      const chance = (level % 5 === 0) ? 0.34 : 0.12;
+      const chance = (level % 5 === 0) ? 0.40 : 0.12;
       if (Math.random() < chance) {
         spawnBoss();
         boss.cd = 24.0;
@@ -1898,95 +1217,78 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     if (!boss.active) return;
 
     boss.ttl -= dt;
-    boss.grace = Math.max(0, boss.grace - dt);
+    boss.warmup = Math.max(0, boss.warmup - dt);
+    boss.retreatT = Math.max(0, boss.retreatT - dt);
     boss.hitCd = Math.max(0, boss.hitCd - dt);
-    boss.retreat = Math.max(0, boss.retreat - dt);
 
     if (boss.ttl <= 0) {
+      if (!boss.aliveRewardGiven) {
+        boss.aliveRewardGiven = true;
+        player.coins += 10;
+        player.score += 180;
+      }
       boss.active = false;
-      boss.cd = 10.0 + Math.random()*6.0;
-      // small reward for surviving the chase
-      player.coins += 4;
-      player.score += 120;
       return;
     }
 
-    // chase player
     const dx = player.x - boss.x;
     const dy = player.y - boss.y;
     const d = Math.hypot(dx,dy) || 1;
     const nx = dx/d, ny = dy/d;
 
-    // boss speed scales with level and biome, but is now escapable
     const b = currentBiome;
-    let sp = 78 + level*4.5;
-    if (b === 'ice') sp += 10;
-    if (b === 'lava') sp += 16;
+    let sp = 96 + level*5;
+    if (b === 'ice') sp += 12;
+    if (b === 'lava') sp += 18;
 
-    if (boss.grace > 0) sp *= 0.35;
-    if (boss.retreat > 0) sp *= 0.72;
-    if (d < 420) sp *= 0.55;
-    if (d > 1600) sp *= 1.08;
+    boss.phase += dt * (boss.warmup > 0 ? 0.75 : 1.05);
+    const wx = Math.cos(boss.phase) * (boss.warmup > 0 ? 54 : 28);
+    const wy = Math.sin(boss.phase*1.1) * (boss.warmup > 0 ? 54 : 28);
 
-    // wobble / orbit
-    boss.phase += dt * (boss.grace > 0 ? 1.7 : 1.1);
-    const orbit = boss.grace > 0 ? 140 : (d < 700 ? 90 : 45);
-    const wx = Math.cos(boss.phase) * orbit;
-    const wy = Math.sin(boss.phase*1.07) * orbit;
+    let steerX = 0;
+    let steerY = 0;
 
-    let tx = nx*sp + wx;
-    let ty = ny*sp + wy;
-
-    if (boss.retreat > 0) {
-      tx = -nx * (sp * 1.15) + wx * 0.45;
-      ty = -ny * (sp * 1.15) + wy * 0.45;
+    if (boss.retreatT > 0) {
+      steerX = -nx * (sp * 0.95) + wx;
+      steerY = -ny * (sp * 0.95) + wy;
+    } else if (boss.warmup > 0) {
+      steerX = nx * (sp * 0.35) + wx;
+      steerY = ny * (sp * 0.35) + wy;
+    } else {
+      steerX = nx * sp + wx;
+      steerY = ny * sp + wy;
     }
 
-    boss.vx = boss.vx*0.90 + tx*0.15;
-    boss.vy = boss.vy*0.90 + ty*0.15;
+    boss.vx = boss.vx*0.90 + steerX*0.20;
+    boss.vy = boss.vy*0.90 + steerY*0.20;
 
     boss.x += boss.vx * dt;
     boss.y += boss.vy * dt;
 
-    // wow feedback when close
-    if (d < 1200) {
-      player.nearMiss += dt * 1.35;
-      kickShake(5, 0.06);
+    if (d < 1400) {
+      player.nearMiss += dt * 1.4;
+      kickShake(5, 0.07);
     }
-    if (d < 700 && boss.grace <= 0) {
-      kickShake(7, 0.08);
+    if (d < 900 && boss.warmup <= 0) {
+      kickShake(9, 0.10);
     }
 
-    // collision: now fairer and not an instant run-killer
-    const rr = player.r + boss.r * 0.86;
-    if (boss.grace <= 0 && boss.hitCd <= 0 && dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
-      if (player.r > boss.r * 1.15) {
-        // eat boss (rare reward)
+    const rr = player.r + boss.r;
+    if (dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
+      if (player.r > boss.r * 1.12) {
         boss.active = false;
-        player.coins += 80;
-        player.score += 1800;
-        player.hp = Math.min(6, player.hp + 2);
-        spawnBurst(boss.x, boss.y, 30, 40, 320);
-        kickShake(20, 0.22);
-      } else {
-        boss.hitCd = 1.35;
-        boss.retreat = 1.45;
+        player.coins += 60;
+        player.score += 1400;
+        player.hp = Math.min(5, player.hp + 1);
+        spawnBurst(boss.x, boss.y, 30, 34, 300);
+        kickShake(18, 0.18);
+      } else if (boss.warmup <= 0 && boss.hitCd <= 0) {
+        boss.hitCd = 1.15;
+        boss.retreatT = 1.6;
+        player.invulnTime = 0;
+        damagePlayer();
         boss.vx += -nx * 260;
         boss.vy += -ny * 260;
-        player.vx += -nx * 150;
-        player.vy += -ny * 150;
-
-        // boss should scare and punish, but not hard-stop the run every time
-        if (player.hp > 1 || player.shieldHits > 0) {
-          damagePlayer();
-        } else {
-          player.invulnTime = Math.max(player.invulnTime, 1.8);
-          loseTailSegments(160);
-          kickShake(8, 0.12);
-        }
-
-        // after tagging the player boss leaves soon instead of chain-killing
-        boss.ttl = Math.min(boss.ttl, 5.2);
       }
     }
   }
@@ -2069,8 +1371,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   function loop(ts) {
     const dt = Math.min(0.033, (ts - lastTs) / 1000);
     lastTs = ts;
-
-    netHeartbeatTick(dt);
     tickCounter++;
 
     if (state === 'RUN') {
@@ -2179,8 +1479,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
       if (performance.now() - (ONLINE.lastRefreshAt || 0) > 30000) onlineRefresh();
 
-      netTick(dt);
-
       // update HUD
       updateHUD();
     }
@@ -2259,57 +1557,29 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
 		// torches (visibility boost)
 		if (ch.torches) {
+
+      // relics
+      if (ch.relics) {
+        for (const rr of ch.relics) {
+          if (collected.has(rr.id)) continue;
+          const grabR = player.r + rr.r + 10;
+          if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
+            collected.add(rr.id);
+            applyRelic(rr.type);
+          }
+        }
+      }
+
 		  for (const t of ch.torches) {
 			if (collected.has(t.id)) continue;
 			const rr = player.r + t.r + 8;
 			if (dist2(player.x, player.y, t.x, t.y) < rr*rr) {
 			  collected.add(t.id);
-			  player.torchTime = 7.0;
+			  player.torchTime = 7.0; // секунд полной видимости
 			  AudioFX.power();
 			}
 		  }
 		}
-
-        // heal orbs
-        if (ch.heals) {
-          for (const hh of ch.heals) {
-            if (collected.has(hh.id)) continue;
-            const rr = player.r + hh.r + 8;
-            if (dist2(player.x, player.y, hh.x, hh.y) < rr*rr) {
-              collected.add(hh.id);
-              player.hp = Math.min(player.maxHp, player.hp + 1);
-              player.score += 30;
-              spawnBurst(hh.x, hh.y, 150, 12, 180);
-            }
-          }
-        }
-
-        // shield orbs
-        if (ch.shields) {
-          for (const ss of ch.shields) {
-            if (collected.has(ss.id)) continue;
-            const rr = player.r + ss.r + 8;
-            if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
-              collected.add(ss.id);
-              player.shieldHits = 1;
-              player.shieldTime = 8.0;
-              player.score += 40;
-              spawnBurst(ss.x, ss.y, 220, 14, 200);
-            }
-          }
-        }
-
-        // relics
-        if (ch.relics) {
-          for (const rr of ch.relics) {
-            if (collected.has(rr.id)) continue;
-            const grabR = player.r + rr.r + 10;
-            if (dist2(player.x, player.y, rr.x, rr.y) < grabR * grabR) {
-              collected.add(rr.id);
-              applyRelic(rr.type);
-            }
-          }
-        }
 
         // mines
         for (const m of ch.mines) {
@@ -2647,36 +1917,24 @@ if (ch.hunters) {
   function damagePlayer() {
 	AudioFX.hit();
     if (player.invulnTime > 0) return;
-
-    if (player.shieldHits > 0) {
-      player.shieldHits = Math.max(0, player.shieldHits - 1);
-      player.shieldTime = 0;
-      player.invulnTime = 1.25;
-      kickShake(7, 0.10);
-      spawnBurst(player.x, player.y, 210, 14, 220);
-      updateHUD();
-      return;
-    }
-
     player.hp--;
-    player.invulnTime = 1.35;
+    player.invulnTime = 1.15; // i-frames (so mines don't insta-delete you)
+    // knockback opposite velocity
     player.vx *= -0.55;
     player.vy *= -0.55;
-    loseTailSegments(220);
+    // also lose some tail
+    loseTailSegments(260);
     kickShake(10, 0.18);
     spawnBurst(player.x, player.y, 350, 18, 260);
 
     if (player.hp <= 0) {
-      if (NET_ENABLED && NET.suppressNextOverlay) {
-        NET.suppressNextOverlay = false;
-        overlay.style.display = 'none';
-        state = 'RUN';
-        return;
-      }
-
       state = 'DEAD';
 	  AudioFX.dead();
 
+		// отправка результата в онлайн
+      // отправка результата в онлайн
+      onlineSubmitResult();
+// submit score + ghost to online leaderboard
       onlineSubmitResult();
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
       if (timeSurv > bestNow) {
@@ -2872,24 +2130,6 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
 
       if (ch.torches) {
 
-      if (ch.heals) {
-        for (const hh of ch.heals) {
-          if (collected.has(hh.id)) continue;
-          const x = sx(hh.x), y = sy(hh.y);
-          if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
-          drawHealOrb(x,y,hh.r,hh.phase);
-        }
-      }
-
-      if (ch.shields) {
-        for (const ss of ch.shields) {
-          if (collected.has(ss.id)) continue;
-          const x = sx(ss.x), y = sy(ss.y);
-          if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
-          drawShieldOrb(x,y,ss.r,ss.phase);
-        }
-      }
-
       // relics
       if (ch.relics) {
         for (const rr of ch.relics) {
@@ -2975,25 +2215,8 @@ if (ch.hunters) {
   // ghost (online)
   onlineGhostDraw(sx, sy);
 
-  // real online players
-  netDrawPlayers(sx, sy);
-
   // player (world)
   drawPlayer(sx(player.x), sy(player.y), player.r);
-  if (player.shieldHits > 0) {
-    ctx.save();
-    const pxs = sx(player.x), pys = sy(player.y);
-    const rg = ctx.createRadialGradient(pxs, pys, player.r*0.3, pxs, pys, player.r*2.2);
-    rg.addColorStop(0, 'rgba(110,170,255,0.10)');
-    rg.addColorStop(1, 'rgba(110,170,255,0)');
-    ctx.fillStyle = rg;
-    ctx.beginPath(); ctx.arc(pxs, pys, player.r*2.2, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(140,190,255,0.92)';
-    ctx.lineWidth = 4 * DPR;
-    ctx.beginPath(); ctx.arc(pxs, pys, player.r * 1.26, 0, TAU); ctx.stroke();
-    ctx.restore();
-  }
-  drawSelfNick();
 
   if (state === 'RUN') drawTarget(mouseX, mouseY);
 
@@ -3051,8 +2274,6 @@ if (ch.hunters) {
 
   // Player outline on top (always readable)
   drawPlayerOutline(px, py, player.r);
-  drawNetLabelsOnTop(sx, sy);
-  drawNetEdgeHints(sx, sy);
 }
 
   function drawBackground() {
@@ -3247,21 +2468,29 @@ function drawCoin(x,y,r) {
   function tryExtract() {
     if (!portal || player.extracted) return false;
     const rr = player.r + portal.r;
+
     if (dist2(player.x, player.y, portal.x, portal.y) < rr*rr) {
       player.extracted = true;
       state = 'DEAD';
       overlay.style.display = 'flex';
-      msgEl.innerHTML = `<div style="font-size:28px;margin-bottom:6px;">ЭКСТРАКЦИЯ ✅</div>
-      <div style="opacity:.85">Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b></div>`;
-      btnStart.textContent = 'Заново';
-      // submit ONLY extracted in expedition
-      onlineSubmitResult(true).then(()=>onlineRefresh());
+
+      overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
+      overlay.querySelectorAll('p')[0].innerHTML =
+        `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
+      overlay.querySelectorAll('p')[1].innerHTML =
+        `Успешный выход из экспедиции. Результат отправлен в таблицу лидеров.`;
+      overlay.querySelectorAll('p')[2].innerHTML =
+        `Нажми <b>Заново</b>, чтобы начать новый забег.`;
+
+      overlay.querySelector('#start').textContent = 'Заново';
+
+      onlineSubmitResult(true).then(() => onlineRefresh());
       return true;
     }
     return false;
   }
 
-  function drawMine(x,y,r) {
+function drawMine(x,y,r) {
     ctx.save();
     // danger glow
     const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.0);
@@ -3416,12 +2645,14 @@ function drawBoss(sx, sy){
   if (x<-900 || y<-900 || x>W+900 || y>H+900) return;
 
   ctx.save();
-  const telegraph = boss.grace > 0;
 
-  // ominous halo / warmup halo
+  const telegraph = boss.warmup > 0;
+  const warmPulse = telegraph ? (0.45 + 0.55*(0.5 + 0.5*Math.sin(performance.now()*0.02))) : 1;
+
+  // ominous halo
   const glow = ctx.createRadialGradient(x,y, 5, x,y, boss.r*2.6);
   if (telegraph) {
-    glow.addColorStop(0, 'rgba(255,210,90,0.20)');
+    glow.addColorStop(0, `rgba(255,180,90,${0.16 + 0.12*warmPulse})`);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
   } else {
     glow.addColorStop(0, 'rgba(255,40,40,0.22)');
@@ -3433,8 +2664,8 @@ function drawBoss(sx, sy){
   // body
   const g = ctx.createLinearGradient(x-boss.r,y-boss.r,x+boss.r,y+boss.r);
   if (telegraph) {
-    g.addColorStop(0,'#3A2300');
-    g.addColorStop(1,'#1E1200');
+    g.addColorStop(0,'#5A2A00');
+    g.addColorStop(1,'#201000');
   } else {
     g.addColorStop(0,'#2A0000');
     g.addColorStop(1,'#130000');
@@ -3443,20 +2674,20 @@ function drawBoss(sx, sy){
   ctx.beginPath(); ctx.arc(x,y,boss.r,0,TAU); ctx.fill();
 
   // spikes
-  ctx.strokeStyle = telegraph ? 'rgba(255,220,150,0.75)' : 'rgba(255,120,120,0.65)';
+  ctx.strokeStyle = telegraph ? 'rgba(255,210,140,0.72)' : 'rgba(255,120,120,0.65)';
   ctx.lineWidth = 3*DPR;
   const n = 22;
   for (let i=0;i<n;i++){
     const a = (i/n)*TAU + boss.phase*0.2;
     const x1 = x + Math.cos(a) * (boss.r*0.92);
     const y1 = y + Math.sin(a) * (boss.r*0.92);
-    const x2 = x + Math.cos(a) * (boss.r*1.18);
-    const y2 = y + Math.sin(a) * (boss.r*1.18);
+    const x2 = x + Math.cos(a) * (boss.r*(telegraph ? 1.12 : 1.18));
+    const y2 = y + Math.sin(a) * (boss.r*(telegraph ? 1.12 : 1.18));
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
   }
 
   // inner eye
-  ctx.fillStyle = 'rgba(255,60,60,0.55)';
+  ctx.fillStyle = telegraph ? 'rgba(255,220,120,0.48)' : 'rgba(255,60,60,0.55)';
   ctx.beginPath(); ctx.arc(x + boss.r*0.18, y - boss.r*0.12, boss.r*0.22, 0, TAU); ctx.fill();
 
   ctx.restore();
@@ -3745,7 +2976,6 @@ function drawPlayerOutline(x,y,r){
   // ==========================
   onlineInitUI();
   onlineRefresh();
-  netConnect();
 
   resetGame();
   requestAnimationFrame(loop);
