@@ -261,7 +261,10 @@
     let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.20');
 
     let musicTimer = null;
+    let musicPulseTimer = null;
     let musicPhase = 0;
+    let musicDayKey = 0;
+    let musicProfile = null;
 
     function ensure() {
       if (ctx) return;
@@ -314,46 +317,187 @@
 
     function stopMusic() {
       if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+      if (musicPulseTimer) { clearTimeout(musicPulseTimer); musicPulseTimer = null; }
+    }
+
+    function makeDailyMusicProfile() {
+      const day = dailySeedUTC() >>> 0;
+      const presets = [
+        { name:'void',   root:82.41, scale:[0,3,7,10], lp:420, stepMin:2200, stepMax:3600, oscA:'sine',     oscB:'triangle', spread:6 },
+        { name:'nebula', root:98.00, scale:[0,2,5,9],  lp:620, stepMin:1800, stepMax:3100, oscA:'triangle', oscB:'sine',     spread:8 },
+        { name:'ice',    root:110.0, scale:[0,5,7,12], lp:760, stepMin:2100, stepMax:3400, oscA:'sine',     oscB:'sine',     spread:4 },
+        { name:'toxic',  root:87.31, scale:[0,3,6,10], lp:520, stepMin:1700, stepMax:2900, oscA:'triangle', oscB:'square',   spread:6 },
+        { name:'lava',   root:73.42, scale:[0,1,5,8],  lp:360, stepMin:1500, stepMax:2400, oscA:'triangle', oscB:'triangle', spread:10 },
+      ];
+      const preset = presets[day % presets.length];
+      return { day, ...preset };
+    }
+
+    function musicVoice(freq, start, dur, vol, type='sine', lp=700, detune=0) {
+      if (!ctx || !musGain) return;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const f = ctx.createBiquadFilter();
+
+      o.type = type;
+      o.frequency.setValueAtTime(freq, start);
+      o.detune.setValueAtTime(detune, start);
+
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(lp, start);
+      f.Q.setValueAtTime(0.8, start);
+
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), start + 0.9);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * 0.42), start + Math.max(1.5, dur * 0.55));
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+      o.connect(f);
+      f.connect(g);
+      g.connect(musGain);
+
+      o.start(start);
+      o.stop(start + dur + 0.08);
+    }
+
+    function musicKick(start, baseFreq = 46, vol = 0.9) {
+      if (!ctx || !musGain) return;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const f = ctx.createBiquadFilter();
+
+      o.type = 'sine';
+      o.frequency.setValueAtTime(baseFreq * 1.9, start);
+      o.frequency.exponentialRampToValueAtTime(baseFreq, start + 0.09);
+      o.frequency.exponentialRampToValueAtTime(Math.max(28, baseFreq * 0.72), start + 0.22);
+
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(140, start);
+      f.Q.setValueAtTime(1.2, start);
+
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.14 * vol, start + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.26);
+
+      o.connect(f);
+      f.connect(g);
+      g.connect(musGain);
+
+      o.start(start);
+      o.stop(start + 0.30);
+    }
+
+    function musicSubPulse(start, freq = 40, dur = 1.7, vol = 0.75) {
+      if (!ctx || !musGain) return;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const f = ctx.createBiquadFilter();
+
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, start);
+
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(120, start);
+      f.Q.setValueAtTime(0.7, start);
+
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.07 * vol, start + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.038 * vol, start + 0.55);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+      o.connect(f);
+      f.connect(g);
+      g.connect(musGain);
+
+      o.start(start);
+      o.stop(start + dur + 0.05);
+    }
+
+    function startMusicPulse() {
+      if (!musicOn || !ctx) return;
+
+      const pulseLoop = () => {
+        if (!musicOn || !ctx) return;
+
+        const today = dailySeedUTC() >>> 0;
+        if (!musicProfile || musicDayKey !== today) {
+          musicProfile = makeDailyMusicProfile();
+          musicDayKey = musicProfile.day;
+        }
+
+        const p = musicProfile;
+        const now = ctx.currentTime;
+
+        let kickBase = 46, subBase = 40, intervalMin = 2600, intervalMax = 4400;
+        if (p.name === 'void')   { kickBase = 44; subBase = 38; intervalMin = 3200; intervalMax = 5200; }
+        if (p.name === 'nebula') { kickBase = 48; subBase = 42; intervalMin = 2500; intervalMax = 4200; }
+        if (p.name === 'ice')    { kickBase = 50; subBase = 44; intervalMin = 3000; intervalMax = 4800; }
+        if (p.name === 'toxic')  { kickBase = 45; subBase = 39; intervalMin = 2200; intervalMax = 3600; }
+        if (p.name === 'lava')   { kickBase = 42; subBase = 36; intervalMin = 1800; intervalMax = 3200; }
+
+        musicSubPulse(now, subBase, 1.8, 0.82);
+        if (Math.random() < 0.84) musicKick(now + 0.02, kickBase, 0.92);
+        if (Math.random() < 0.34) musicKick(now + 0.72 + Math.random()*0.18, kickBase * 0.98, 0.52);
+
+        const next = intervalMin + Math.random() * (intervalMax - intervalMin);
+        musicPulseTimer = setTimeout(pulseLoop, next);
+      };
+
+      pulseLoop();
     }
 
     function startMusic() {
       ensure();
       stopMusic();
-      // мягкий эмбиент: редкие "нотки", без пилы
-      const scale = [0, 3, 5, 7, 10]; // минор пентатоника
-      const base = 196; // G3
+
+      musicPhase = 0;
+      musicDayKey = 0;
+      musicProfile = null;
+
+      startMusicPulse();
+
       const playOne = () => {
         if (!musicOn || !ctx) return;
+
+        const today = dailySeedUTC() >>> 0;
+        if (!musicProfile || musicDayKey !== today) {
+          musicProfile = makeDailyMusicProfile();
+          musicDayKey = musicProfile.day;
+          musicPhase = 0;
+        }
+
         const now = ctx.currentTime;
-        const note = scale[(musicPhase + Math.floor(Math.random()*2)) % scale.length];
-        const freq = base * Math.pow(2, note/12) * (Math.random() < 0.5 ? 1 : 2);
-        musicPhase = (musicPhase + 1) % scale.length;
+        const p = musicProfile;
+        const scale = p.scale;
 
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(freq, now);
+        const degreeA = scale[musicPhase % scale.length];
+        const degreeB = scale[(musicPhase + 2) % scale.length];
+        const baseFreq = p.root * Math.pow(2, degreeA / 12);
+        const upperFreq = p.root * Math.pow(2, (degreeB + 12) / 12);
+        const subFreq = p.root * 0.5;
 
-        // огибающая
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+        musicVoice(subFreq, now, 4.8, 0.032, p.oscA, p.lp * 0.72, -p.spread);
+        musicVoice(baseFreq, now, 3.4 + Math.random()*0.8, 0.056, p.oscA, p.lp, p.spread);
 
-        // лёгкий lowpass
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass';
-        f.frequency.setValueAtTime(700, now);
+        if (Math.random() < 0.88) {
+          musicVoice(upperFreq, now + 0.22, 2.6 + Math.random()*0.7, 0.036, p.oscB, p.lp + 220, -p.spread * 0.5);
+        }
 
-        o.connect(f);
-        f.connect(g);
-        g.connect(musGain);
+        if (Math.random() < 0.28) {
+          const degreeC = scale[(musicPhase + 1) % scale.length];
+          const midFreq = p.root * Math.pow(2, degreeC / 12) * 2;
+          musicVoice(midFreq, now + 0.08, 2.0, 0.022, 'sine', p.lp + 120, 0);
+        }
 
-        o.start(now);
-        o.stop(now + 0.60);
+        musicPhase = (musicPhase + 1) % (scale.length * 2);
 
-        const next = 520 + Math.random()*600; // пауза между нотами
+        const next = p.stepMin + Math.random() * (p.stepMax - p.stepMin);
         musicTimer = setTimeout(playOne, next);
       };
+
       playOne();
     }
 
@@ -930,7 +1074,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
 
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      drawNetPlayer(x, y, p.r, p.name, p.color, rel);
+      drawNetPlayer(x, y, p.r * viewZoom, p.name, p.color, rel);
     }
   }
 
@@ -938,7 +1082,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (!NET_ENABLED) return;
     const x = W / 2;
     const y = H / 2;
-    const r = player.r;
+    const r = player.r * viewZoom;
 
     ctx.save();
     ctx.strokeStyle = 'rgba(0,0,0,0.75)';
@@ -969,18 +1113,19 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
 
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      const labelY = y - p.r - 14 * DPR;
+      const pr = p.r * viewZoom;
+      const labelY = y - pr - 14 * DPR;
 
       ctx.fillStyle = p.color || '#79C8FF';
       ctx.globalAlpha = 0.55;
       ctx.beginPath();
-      ctx.arc(x, y, Math.max(6 * DPR, p.r * 0.34), 0, TAU);
+      ctx.arc(x, y, Math.max(6 * DPR, pr * 0.34), 0, TAU);
       ctx.fill();
       ctx.globalAlpha = 1;
 
       ctx.lineWidth = 5 * DPR;
       ctx.strokeStyle = 'rgba(0,0,0,0.82)';
-      ctx.font = `${Math.max(12 * DPR, p.r * 0.44)}px system-ui,Segoe UI,Arial`;
+      ctx.font = `${Math.max(12 * DPR, pr * 0.44)}px system-ui,Segoe UI,Arial`;
       const nm = String(p.name || 'anon').slice(0,18);
       ctx.strokeText(nm, x, labelY);
 
@@ -1618,6 +1763,14 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
   // camera (world->screen)
   const cam = { x:0, y:0 };
+  let viewZoom = 1;
+
+  function getViewZoom() {
+    const ratio = Math.max(1, player.r / player.baseR);
+    return clamp(1 / (1 + Math.max(0, Math.log2(ratio)) * 0.18), 0.58, 1.0);
+  }
+  function screenToWorldX(screenX) { return cam.x + (screenX - W/2) / viewZoom; }
+  function screenToWorldY(screenY) { return cam.y + (screenY - H/2) / viewZoom; }
 
   let timeSurv = 0;
   let level = 1;
@@ -1731,11 +1884,11 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     ctx.globalCompositeOperation = 'lighter';
     for (const p of fx){
       const x = sx(p.x), y = sy(p.y);
-      const g = ctx.createRadialGradient(x,y,0,x,y,p.r*5);
+      const g = ctx.createRadialGradient(x,y,0,x,y,p.r*5*viewZoom);
       g.addColorStop(0, `hsla(${p.hue},100%,70%,0.55)`);
       g.addColorStop(1, `hsla(${p.hue},100%,60%,0)`);
       ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x,y,p.r*5,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x,y,p.r*5*viewZoom,0,TAU); ctx.fill();
     }
     ctx.restore();
   }
@@ -2129,8 +2282,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   // ==========================
   function doDash() {
     // dash in direction of mouse target
-    const tx = cam.x + (mouseX - W/2);
-    const ty = cam.y + (mouseY - H/2);
+    const tx = screenToWorldX(mouseX);
+    const ty = screenToWorldY(mouseY);
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2154,8 +2307,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     player.ejectCd = 0.18;
 
     // aim direction (world)
-    const tx = cam.x + (mouseX - W/2);
-    const ty = cam.y + (mouseY - H/2);
+    const tx = screenToWorldX(mouseX);
+    const ty = screenToWorldY(mouseY);
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2266,8 +2419,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
       }
 
       // Move target in WORLD coords: cursor relative to screen center
-      const targetX = cam.x + (mouseX - W/2);
-      const targetY = cam.y + (mouseY - H/2);
+      const targetX = screenToWorldX(mouseX);
+      const targetY = screenToWorldY(mouseY);
 
       // Inertia follow
       const dx = targetX - player.x;
@@ -3021,16 +3174,20 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0,0,W,H);
 
+  // dynamic camera zoom: чем больше шар, тем больше мира видно
+  const sizeRatioR = player.r / player.baseR;
+  viewZoom = getViewZoom();
+
   // screen position of player
-  const px = W/2 + (player.x - cam.x);
-  const py = H/2 + (player.y - cam.y);
+  const px = W/2 + (player.x - cam.x) * viewZoom;
+  const py = H/2 + (player.y - cam.y) * viewZoom;
 
   // update biome for visuals
   currentBiome = biomeOf(Math.floor(player.x / CHUNK), Math.floor(player.y / CHUNK));
 
   // mouse in WORLD coords
-  const tx = cam.x + (mouseX - W/2);
-  const ty = cam.y + (mouseY - H/2);
+  const tx = screenToWorldX(mouseX);
+  const ty = screenToWorldY(mouseY);
 
   let dx = tx - player.x;
   let dy = ty - player.y;
@@ -3039,26 +3196,27 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
 
   const ang = Math.atan2(dy, dx);
 
-  // base visibility (also used as flashlight length)
+  // фонарь в world units чуть ужимается по росту, но камера открывает больше мира
   const base = Math.min(W, H) * 0.36;
   const shrink = clamp(level * 22, 0, base * 0.70);
-  const sizeBoost = clamp((player.r - player.baseR) * 18, 0, base * 0.85);
-  const torchBoost = (player.torchTime > 0) ? base * 1.40 : 0;
-  const vis = clamp(base - shrink + sizeBoost + torchBoost, 240 * DPR, 1200 * DPR);
+  const sizePenalty = clamp((sizeRatioR - 1) * 14, 0, base * 0.22);
+  const torchBoost = (player.torchTime > 0) ? base * 1.30 : 0;
+  const vis = clamp(base - shrink - sizePenalty + torchBoost, 240 * DPR, 1040 * DPR);
 
-  const sizeRatioR = player.r / player.baseR;
   const mineScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.45, 1.0);
   const trapScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.55, 1.0);
+  const renderR = player.r * viewZoom;
+  const zoomOpen = clamp((1 - viewZoom) / 0.42, 0, 1);
 
-  // flashlight parameters (beam)
-  const beamLen = vis * 1.25;                 // length of the beam
-  const beamHalf = 0.30;                      // half-angle (radians)
-  const startR = clamp(player.r * 0.55, 16*DPR, 34*DPR); // start radius
-  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.9, 70*DPR, 150*DPR); // rounded head radius
-  const featherPx = 28 * DPR;                 // blur for soft edge (vignette)
+  // flashlight parameters (screen space)
+  const beamLen = vis * viewZoom * 1.18;
+  const beamHalf = lerp(0.30, 0.22, zoomOpen);
+  const startR = clamp(renderR * 0.55, 14*DPR, 30*DPR);
+  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.88, 62*DPR, 138*DPR);
+  const featherPx = (24 + zoomOpen * 10) * DPR;
 
-  // small aura around player (3–4 ball radii)
-  const auraR = clamp(player.r * 3.6, 70*DPR, 280*DPR);
+  // small aura around player
+  const auraR = clamp(renderR * 3.2, 58*DPR, 220*DPR);
 
   // === 1) Draw the WORLD full-screen (it will be masked) ===
   drawBackground();
@@ -3067,15 +3225,17 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   // world -> screen transform
   const sh = (shakeT > 0) ? (Math.sin(performance.now()*0.06) * shakeA * DPR) : 0;
   const sh2 = (shakeT > 0) ? (Math.cos(performance.now()*0.05) * shakeA * DPR) : 0;
-  const sx = (x)=> (x - cam.x) + W/2 + sh;
-  const sy = (y)=> (y - cam.y) + H/2 + sh2;
+  const sx = (x)=> (x - cam.x) * viewZoom + W/2 + sh;
+  const sy = (y)=> (y - cam.y) * viewZoom + H/2 + sh2;
 
   // Determine chunk range based on camera & view
   const pad = VIEW_PAD;
-  const minX = cam.x - (W/2 + pad);
-  const maxX = cam.x + (W/2 + pad);
-  const minY = cam.y - (H/2 + pad);
-  const maxY = cam.y + (H/2 + pad);
+  const halfW = (W/2 + pad) / viewZoom;
+  const halfH = (H/2 + pad) / viewZoom;
+  const minX = cam.x - halfW;
+  const maxX = cam.x + halfW;
+  const minY = cam.y - halfH;
+  const maxY = cam.y + halfH;
 
   const cx0 = Math.floor(minX / CHUNK);
   const cx1 = Math.floor(maxX / CHUNK);
@@ -3091,7 +3251,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         if (collected.has(c.id)) continue;
         const x = sx(c.x), y = sy(c.y);
         if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
-        drawCoin(x,y,c.r);
+        drawCoin(x,y,c.r * viewZoom);
       }
 
       if (ch.heals) {
@@ -3099,7 +3259,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(hh.id)) continue;
           const x = sx(hh.x), y = sy(hh.y);
           if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
-          drawHealOrb(x,y,hh.r,hh.phase);
+          drawHealOrb(x,y,hh.r * viewZoom,hh.phase);
         }
       }
 
@@ -3108,7 +3268,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(ss.id)) continue;
           const x = sx(ss.x), y = sy(ss.y);
           if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
-          drawShieldOrb(x,y,ss.r,ss.phase);
+          drawShieldOrb(x,y,ss.r * viewZoom,ss.phase);
         }
       }
 
@@ -3118,7 +3278,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(rr.id)) continue;
           const x = sx(rr.x), y = sy(rr.y);
           if (x<-140 || y<-140 || x>W+140 || y>H+140) continue;
-          drawRelic(x,y,rr.r, rr.type);
+          drawRelic(x,y,rr.r * viewZoom, rr.type);
         }
       }
 
@@ -3127,7 +3287,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(tt.id)) continue;
           const x = sx(tt.x), y = sy(tt.y);
           if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
-          drawTorch(x,y,tt.r);
+          drawTorch(x,y,tt.r * viewZoom);
         }
       }
 
@@ -3136,7 +3296,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-        drawMine(x,y,m.r * mineScaleR);
+        drawMine(x,y,m.r * mineScaleR * viewZoom, m.armed ?? 0);
       }
 // agar-style cells
 if (ch.cells) {
@@ -3146,7 +3306,7 @@ if (ch.cells) {
     if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
     const eatF = 1.12;
     const rel = (player.r > cc.r*eatF) ? 1 : (cc.r > player.r*eatF ? -1 : 0);
-    drawCell(x,y,cc.r,cc.hue,cc.kind,cc.skin,rel);
+    drawCell(x,y,cc.r * viewZoom,cc.hue,cc.kind,cc.skin,rel);
   }
 }
 // virus
@@ -3155,7 +3315,7 @@ if (ch.viruses) {
     if (collected.has(v.id)) continue;
     const x = sx(v.x), y = sy(v.y);
     if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
-    drawVirus(x,y,v.r*trapScaleR,v.phase);
+    drawVirus(x,y,v.r*trapScaleR*viewZoom,v.phase);
   }
 }
 // mimic coin (trap)
@@ -3164,7 +3324,7 @@ if (ch.mimics) {
     if (collected.has(mm.id)) continue;
     const x = sx(mm.x), y = sy(mm.y);
     if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
-    drawMimic(x,y,mm.r*trapScaleR,mm.phase);
+    drawMimic(x,y,mm.r*trapScaleR*viewZoom,mm.phase);
   }
 }
 // hunters / predators
@@ -3175,7 +3335,7 @@ if (ch.hunters) {
     if (x<-180 || y<-180 || x>W+180 || y>H+180) continue;
     const eatF = 1.12;
     const rel = (player.r > h.r*eatF) ? 1 : (h.r > player.r*eatF ? -1 : 0);
-    drawHunter(x,y,h.r,h.kind,h.hue,h.skin,h.charge>0?1:0,rel);
+    drawHunter(x,y,h.r * viewZoom,h.kind,h.hue,h.skin,h.charge>0?1:0,rel);
   }
 }
     }
@@ -3192,7 +3352,7 @@ if (ch.hunters) {
   for (const p of pellets) {
     const x = sx(p.x), y = sy(p.y);
     if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-    drawPellet(x,y,p.r);
+    drawPellet(x,y,p.r * viewZoom);
   }
 
   // ghost (online)
@@ -3202,18 +3362,18 @@ if (ch.hunters) {
   netDrawPlayers(sx, sy);
 
   // player (world)
-  drawPlayer(sx(player.x), sy(player.y), player.r);
+  drawPlayer(sx(player.x), sy(player.y), player.r * viewZoom);
   if (player.shieldHits > 0) {
     ctx.save();
     const pxs = sx(player.x), pys = sy(player.y);
-    const rg = ctx.createRadialGradient(pxs, pys, player.r*0.3, pxs, pys, player.r*2.2);
+    const rg = ctx.createRadialGradient(pxs, pys, player.r*viewZoom*0.3, pxs, pys, player.r*viewZoom*2.2);
     rg.addColorStop(0, 'rgba(110,170,255,0.10)');
     rg.addColorStop(1, 'rgba(110,170,255,0)');
     ctx.fillStyle = rg;
-    ctx.beginPath(); ctx.arc(pxs, pys, player.r*2.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(pxs, pys, player.r*viewZoom*2.2, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(140,190,255,0.92)';
     ctx.lineWidth = 4 * DPR;
-    ctx.beginPath(); ctx.arc(pxs, pys, player.r * 1.26, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(pxs, pys, player.r * viewZoom * 1.26, 0, TAU); ctx.stroke();
     ctx.restore();
   }
   drawSelfNick();
@@ -3273,7 +3433,7 @@ if (ch.hunters) {
   drawTail(sx, sy);
 
   // Player outline on top (always readable)
-  drawPlayerOutline(px, py, player.r);
+  drawPlayerOutline(px, py, player.r * viewZoom);
   drawNetLabelsOnTop(sx, sy);
   drawNetEdgeHints(sx, sy);
 }
@@ -3688,29 +3848,30 @@ function drawSwarms(sx, sy){
   for (const s of swarms){
     const x = sx(s.x), y = sy(s.y);
     if (x<-200 || y<-200 || x>W+200 || y>H+200) continue;
-    drawSwarmDrone(x,y,s.r,s.hue,s.kind);
+    drawSwarmDrone(x,y,s.r * viewZoom,s.hue,s.kind);
   }
 }
 
 function drawBoss(sx, sy){
   if (!boss.active) return;
   const x = sx(boss.x), y = sy(boss.y);
+  const br = boss.r * viewZoom;
   if (x<-900 || y<-900 || x>W+900 || y>H+900) return;
 
   ctx.save();
   // ominous halo
-  const glow = ctx.createRadialGradient(x,y, 5, x,y, boss.r*2.6);
+  const glow = ctx.createRadialGradient(x,y, 5, x,y, br*2.6);
   glow.addColorStop(0, 'rgba(255,40,40,0.22)');
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.arc(x,y,boss.r*2.6,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x,y,br*2.6,0,TAU); ctx.fill();
 
   // body
-  const g = ctx.createLinearGradient(x-boss.r,y-boss.r,x+boss.r,y+boss.r);
+  const g = ctx.createLinearGradient(x-br,y-br,x+br,y+br);
   g.addColorStop(0,'#2A0000');
   g.addColorStop(1,'#130000');
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(x,y,boss.r,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x,y,br,0,TAU); ctx.fill();
 
   // spikes
   ctx.strokeStyle = 'rgba(255,120,120,0.65)';
@@ -3718,16 +3879,16 @@ function drawBoss(sx, sy){
   const n = 22;
   for (let i=0;i<n;i++){
     const a = (i/n)*TAU + boss.phase*0.2;
-    const x1 = x + Math.cos(a) * (boss.r*0.92);
-    const y1 = y + Math.sin(a) * (boss.r*0.92);
-    const x2 = x + Math.cos(a) * (boss.r*1.18);
-    const y2 = y + Math.sin(a) * (boss.r*1.18);
+    const x1 = x + Math.cos(a) * (br*0.92);
+    const y1 = y + Math.sin(a) * (br*0.92);
+    const x2 = x + Math.cos(a) * (br*1.18);
+    const y2 = y + Math.sin(a) * (br*1.18);
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
   }
 
   // inner eye
   ctx.fillStyle = 'rgba(255,60,60,0.55)';
-  ctx.beginPath(); ctx.arc(x + boss.r*0.18, y - boss.r*0.12, boss.r*0.22, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + br*0.18, y - br*0.12, br*0.22, 0, TAU); ctx.fill();
 
   ctx.restore();
 }
@@ -3892,7 +4053,7 @@ function drawPlayerOutline(x,y,r){
 
     // glow stroke
     ctx.strokeStyle = `rgba(90,180,255,${a*0.7})`;
-    ctx.lineWidth = (18 + player.r*0.25) * DPR;
+    ctx.lineWidth = (18 + player.r*0.25) * DPR * viewZoom;
     ctx.beginPath();
     for (let i=0;i<tail.points.length;i++){
       const p = tail.points[i];
@@ -3903,7 +4064,7 @@ function drawPlayerOutline(x,y,r){
 
     // core stroke
     ctx.strokeStyle = `rgba(220,245,255,${a})`;
-    ctx.lineWidth = (2.5 + player.r*0.06) * DPR;
+    ctx.lineWidth = (2.5 + player.r*0.06) * DPR * viewZoom;
     ctx.beginPath();
     for (let i=0;i<tail.points.length;i++){
       const p = tail.points[i];
