@@ -97,6 +97,27 @@ function getRoom(name) {
   return room;
 }
 
+function resetPlayerState(p, spawn = randomSpawn()) {
+  p.x = spawn.x;
+  p.y = spawn.y;
+  p.r = 18;
+  p.hp = 3;
+  p.score = 0;
+  p.alive = true;
+  p.extracted = false;
+  p.spawn = spawn;
+  p.respawnAt = 0;
+  p.pvpInvulnUntil = Date.now() + 1800;
+  return spawn;
+}
+
+function directSend(ws, payload) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+
 function roomColorFromId(id) {
   const palette = [
     '#79C8FF', '#6BFFB0', '#FFD36A', '#FF8BA7',
@@ -223,6 +244,20 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (pathname === '/robots.txt' && req.method === 'GET') {
+    const host = `https://${req.headers.host}`;
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(`User-agent: *\nAllow: /\nSitemap: ${host}/sitemap.xml\n`);
+    return;
+  }
+
+  if (pathname === '/sitemap.xml' && req.method === 'GET') {
+    const host = `https://${req.headers.host}`;
+    res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${host}/</loc></url>\n</urlset>`);
+    return;
+  }
+
   return serveStatic(req, res, pathname);
 });
 
@@ -256,6 +291,9 @@ wss.on('connection', (ws) => {
     extracted: false,
     color: roomColorFromId(id),
     lastSeen: Date.now(),
+    spawn: { x: 0, y: 0 },
+    respawnAt: 0,
+    pvpInvulnUntil: Date.now() + 1500,
     ws,
   };
 
@@ -279,29 +317,19 @@ wss.on('connection', (ws) => {
       }
 
       const room = getRoom(msg.room);
-      const spawn = randomSpawn();
-
       ws.player.name = sanitizeName(msg.name);
       ws.player.room = room.name;
-      ws.player.x = spawn.x;
-      ws.player.y = spawn.y;
-      ws.player.r = 18;
-      ws.player.hp = 3;
-      ws.player.score = 0;
-      ws.player.alive = false;
-      ws.player.extracted = false;
+      const spawn = resetPlayerState(ws.player);
 
       room.players.set(ws.player.id, ws.player);
 
-      if (ws.readyState === 1) {
-        ws.send(JSON.stringify({
-          type: 'welcome',
-          id: ws.player.id,
-          room: room.name,
-          color: ws.player.color,
-          spawn,
-        }));
-      }
+      directSend(ws, {
+        type: 'welcome',
+        id: ws.player.id,
+        room: room.name,
+        color: ws.player.color,
+        spawn,
+      });
 
       broadcastRoom(room);
       return;
@@ -318,9 +346,25 @@ wss.on('connection', (ws) => {
       if (typeof msg.name === 'string' && msg.name.trim()) {
         ws.player.name = sanitizeName(msg.name);
       }
-      if (typeof msg.alive !== 'undefined') {
+      if (typeof msg.alive !== 'undefined' && ws.player.respawnAt <= 0) {
         ws.player.alive = !!msg.alive;
       }
+      return;
+    }
+
+    if (msg.type === 'respawn') {
+      const room = getRoom(msg.room || ws.player.room);
+      ws.player.room = room.name;
+      const spawn = resetPlayerState(ws.player);
+      room.players.set(ws.player.id, ws.player);
+      directSend(ws, {
+        type: 'respawned',
+        spawn,
+        hp: ws.player.hp,
+        r: ws.player.r,
+        score: ws.player.score,
+      });
+      broadcastRoom(room);
       return;
     }
 
@@ -330,8 +374,10 @@ wss.on('connection', (ws) => {
       ws.player.r = clamp(Number(msg.r) || 18, 8, 2000);
       ws.player.hp = clamp(Number(msg.hp) || 0, 0, 20);
       ws.player.score = clamp(Number(msg.score) || 0, 0, 100000000);
-      ws.player.alive = !!msg.alive;
-      ws.player.extracted = !!msg.extracted;
+      if (!ws.player.respawnAt) {
+        ws.player.alive = !!msg.alive;
+        ws.player.extracted = !!msg.extracted;
+      }
       return;
     }
   });
@@ -345,6 +391,81 @@ wss.on('connection', (ws) => {
     }
   });
 });
+
+
+function processRoomPvp(room, now) {
+  const players = [...room.players.values()].filter(p => p.alive && !p.extracted);
+
+  for (let i = 0; i < players.length; i++) {
+    const a = players[i];
+    for (let j = i + 1; j < players.length; j++) {
+      const b = players[j];
+      if (now < (a.pvpInvulnUntil || 0) || now < (b.pvpInvulnUntil || 0)) continue;
+
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const rr = a.r + b.r;
+      if (dx * dx + dy * dy > rr * rr) continue;
+
+      let big = null;
+      let small = null;
+      if (a.r >= b.r * 1.12) {
+        big = a; small = b;
+      } else if (b.r >= a.r * 1.12) {
+        big = b; small = a;
+      } else {
+        continue;
+      }
+
+      big.r = clamp(big.r + small.r * 0.16, 18, 2000);
+      big.score = clamp(big.score + 120 + Math.round(small.r * 6), 0, 100000000);
+      big.hp = clamp(big.hp + 1, 0, 6);
+      big.pvpInvulnUntil = now + 900;
+
+      small.alive = false;
+      small.hp = 0;
+      small.respawnAt = now + 1400;
+      small.pvpInvulnUntil = now + 1800;
+
+      directSend(big.ws, {
+        type: 'pvp',
+        role: 'attacker',
+        victimId: small.id,
+        victimName: small.name,
+        r: big.r,
+        hp: big.hp,
+        score: big.score,
+      });
+
+      directSend(small.ws, {
+        type: 'pvp',
+        role: 'victim',
+        killerId: big.id,
+        killerName: big.name,
+        respawnInMs: 1400,
+      });
+
+      return true;
+    }
+  }
+  return false;
+}
+
+function processRespawns(room, now) {
+  for (const p of room.players.values()) {
+    if (p.respawnAt && now >= p.respawnAt) {
+      const spawn = resetPlayerState(p);
+      directSend(p.ws, {
+        type: 'respawned',
+        spawn,
+        hp: p.hp,
+        r: p.r,
+        score: p.score,
+      });
+      p.respawnAt = 0;
+    }
+  }
+}
 
 setInterval(() => {
   const now = Date.now();
@@ -361,9 +482,11 @@ setInterval(() => {
       continue;
     }
 
+    processRespawns(room, now);
+    processRoomPvp(room, now);
     broadcastRoom(room);
   }
-}, 1000 / 10);
+}, 1000 / 15);
 
 server.listen(PORT, HOST, () => {
   console.log(`VoidRun network server: http://${HOST}:${PORT}`);
