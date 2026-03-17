@@ -867,6 +867,77 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     ctx.restore();
   }
 
+
+  function drawNetEdgeHints(sx, sy) {
+    if (!NET_ENABLED) return;
+    if (!NET.players.size) return;
+
+    const eatF = 1.12;
+    const pad = 34 * DPR;
+    const cx = W / 2;
+    const cy = H / 2;
+
+    ctx.save();
+
+    for (const p of NET.players.values()) {
+      if (!p.alive) continue;
+
+      const x = sx(p.x);
+      const y = sy(p.y);
+
+      if (x >= pad && x <= W - pad && y >= pad && y <= H - pad) continue;
+
+      const vx = x - cx;
+      const vy = y - cy;
+      if (!vx && !vy) continue;
+
+      const kx = vx > 0 ? (W - pad - cx) / vx : (pad - cx) / vx;
+      const ky = vy > 0 ? (H - pad - cy) / vy : (pad - cy) / vy;
+      const k = Math.min(Math.abs(kx), Math.abs(ky));
+      if (!isFinite(k) || k <= 0) continue;
+
+      const ex = cx + vx * k;
+      const ey = cy + vy * k;
+
+      const dx = p.x - player.x;
+      const dy = p.y - player.y;
+      const worldDist = Math.hypot(dx, dy);
+
+      const near = 1 - clamp(worldDist / 2600, 0, 1);
+      const alpha = 0.16 + near * 0.76;
+      const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
+      const baseColor = rel > 0
+        ? 'rgba(110,255,170,1)'
+        : rel < 0
+        ? 'rgba(255,120,145,1)'
+        : (p.color || 'rgba(121,200,255,1)');
+
+      const ang = Math.atan2(vy, vx);
+      const tx = ex - Math.cos(ang) * (16 * DPR);
+      const ty = ey - Math.sin(ang) * (16 * DPR);
+      const nm = String(p.name || 'anon').slice(0, 18);
+
+      ctx.globalAlpha = alpha * 0.22;
+      ctx.fillStyle = baseColor;
+      ctx.beginPath();
+      ctx.arc(ex, ey, (10 + near * 10) * DPR, 0, TAU);
+      ctx.fill();
+
+      ctx.globalAlpha = alpha * 0.95;
+      ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+      ctx.lineWidth = 5 * DPR;
+      ctx.font = `${Math.max(11 * DPR, (12 + near * 5) * DPR)}px system-ui,Segoe UI,Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.strokeText(nm, tx, ty);
+
+      ctx.fillStyle = baseColor;
+      ctx.fillText(nm, tx, ty);
+    }
+
+    ctx.restore();
+  }
+
   function onlineInitUI() {
     if (onlineSeedEl) {
       onlineSeedEl.textContent = NET_ENABLED
@@ -2669,6 +2740,7 @@ if (ch.hunters) {
   // Player outline on top (always readable)
   drawPlayerOutline(px, py, player.r);
   drawNetLabelsOnTop(sx, sy);
+  drawNetEdgeHints(sx, sy);
 }
 
   function drawBackground() {
