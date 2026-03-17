@@ -1528,7 +1528,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   const swarms = []; // list of drones {x,y,vx,vy,r,kind,hue,ttl}
   let swarmCd = 6.0;
 
-  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0};
+  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0, grace:0, hitCd:0, retreat:0};
 
 
   // ==========================
@@ -1552,6 +1552,9 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.ttl = 0;
     boss.cd = 18.0;
     boss.phase = 0;
+    boss.grace = 0;
+    boss.hitCd = 0;
+    boss.retreat = 0;
   }
 
   function resetTransientFX() {
@@ -1864,36 +1867,47 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
   function spawnBoss() {
     const a = Math.random() * TAU;
-    const dist = 2400 + Math.random()*1000;
+    const dist = 3000 + Math.random()*1200;
     boss.x = player.x + Math.cos(a)*dist;
     boss.y = player.y + Math.sin(a)*dist;
-    boss.r = Math.max(260, player.r * 2.4);
+    boss.r = clamp(Math.max(220, player.r * 1.95), 220, 320);
     boss.vx = 0;
     boss.vy = 0;
-    boss.ttl = 18.0;
+    boss.ttl = 14.0;
     boss.phase = Math.random()*TAU;
+    boss.grace = 1.7;
+    boss.hitCd = 0;
+    boss.retreat = 0;
     boss.active = true;
-    kickShake(10, 0.16);
+    kickShake(7, 0.12);
   }
 
   function updateBoss(dt) {
     boss.cd = Math.max(0, boss.cd - dt);
     if (!boss.active && level >= 5 && boss.cd <= 0) {
-      // spawn boss sometimes (wow moment)
-      const chance = (level % 5 === 0) ? 0.55 : 0.18;
+      // spawn boss sometimes (wow moment), but much fairer
+      const chance = (level % 5 === 0) ? 0.34 : 0.12;
       if (Math.random() < chance) {
         spawnBoss();
-        boss.cd = 22.0;
+        boss.cd = 24.0;
       } else {
-        boss.cd = 8.0 + Math.random()*8.0;
+        boss.cd = 10.0 + Math.random()*8.0;
       }
     }
 
     if (!boss.active) return;
 
     boss.ttl -= dt;
+    boss.grace = Math.max(0, boss.grace - dt);
+    boss.hitCd = Math.max(0, boss.hitCd - dt);
+    boss.retreat = Math.max(0, boss.retreat - dt);
+
     if (boss.ttl <= 0) {
       boss.active = false;
+      boss.cd = 10.0 + Math.random()*6.0;
+      // small reward for surviving the chase
+      player.coins += 4;
+      player.score += 120;
       return;
     }
 
@@ -1903,37 +1917,51 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     const d = Math.hypot(dx,dy) || 1;
     const nx = dx/d, ny = dy/d;
 
-    // boss speed scales with level and biome
+    // boss speed scales with level and biome, but is now escapable
     const b = currentBiome;
-    let sp = 140 + level*8;
-    if (b === 'ice') sp += 20;
-    if (b === 'lava') sp += 35;
+    let sp = 78 + level*4.5;
+    if (b === 'ice') sp += 10;
+    if (b === 'lava') sp += 16;
 
-    // wobble
-    boss.phase += dt * 1.2;
-    const wx = Math.cos(boss.phase) * 35;
-    const wy = Math.sin(boss.phase*1.1) * 35;
+    if (boss.grace > 0) sp *= 0.35;
+    if (boss.retreat > 0) sp *= 0.72;
+    if (d < 420) sp *= 0.55;
+    if (d > 1600) sp *= 1.08;
 
-    boss.vx = boss.vx*0.88 + (nx*sp + wx)*0.24;
-    boss.vy = boss.vy*0.88 + (ny*sp + wy)*0.24;
+    // wobble / orbit
+    boss.phase += dt * (boss.grace > 0 ? 1.7 : 1.1);
+    const orbit = boss.grace > 0 ? 140 : (d < 700 ? 90 : 45);
+    const wx = Math.cos(boss.phase) * orbit;
+    const wy = Math.sin(boss.phase*1.07) * orbit;
+
+    let tx = nx*sp + wx;
+    let ty = ny*sp + wy;
+
+    if (boss.retreat > 0) {
+      tx = -nx * (sp * 1.15) + wx * 0.45;
+      ty = -ny * (sp * 1.15) + wy * 0.45;
+    }
+
+    boss.vx = boss.vx*0.90 + tx*0.15;
+    boss.vy = boss.vy*0.90 + ty*0.15;
 
     boss.x += boss.vx * dt;
     boss.y += boss.vy * dt;
 
     // wow feedback when close
-    if (d < 1400) {
-      player.nearMiss += dt * 2.2;
-      kickShake(8, 0.10);
+    if (d < 1200) {
+      player.nearMiss += dt * 1.35;
+      kickShake(5, 0.06);
     }
-    if (d < 900) {
-      kickShake(14, 0.14);
+    if (d < 700 && boss.grace <= 0) {
+      kickShake(7, 0.08);
     }
 
-    // collision: you almost never can eat it, but if you become huge -> reward
-    const rr = player.r + boss.r;
-    if (dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
-      if (player.r > boss.r * 1.18) {
-        // eat boss (rare!)
+    // collision: now fairer and not an instant run-killer
+    const rr = player.r + boss.r * 0.86;
+    if (boss.grace <= 0 && boss.hitCd <= 0 && dist2(player.x, player.y, boss.x, boss.y) < rr*rr) {
+      if (player.r > boss.r * 1.15) {
+        // eat boss (rare reward)
         boss.active = false;
         player.coins += 80;
         player.score += 1800;
@@ -1941,13 +1969,24 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
         spawnBurst(boss.x, boss.y, 30, 40, 320);
         kickShake(20, 0.22);
       } else {
-        // brutal hit
-        player.invulnTime = 0;
-        player.hp = 1;
-        boss.active = false;
-        boss.ttl = 0;
-        boss.cd = 12.0;
-        damagePlayer();
+        boss.hitCd = 1.35;
+        boss.retreat = 1.45;
+        boss.vx += -nx * 260;
+        boss.vy += -ny * 260;
+        player.vx += -nx * 150;
+        player.vy += -ny * 150;
+
+        // boss should scare and punish, but not hard-stop the run every time
+        if (player.hp > 1 || player.shieldHits > 0) {
+          damagePlayer();
+        } else {
+          player.invulnTime = Math.max(player.invulnTime, 1.8);
+          loseTailSegments(160);
+          kickShake(8, 0.12);
+        }
+
+        // after tagging the player boss leaves soon instead of chain-killing
+        boss.ttl = Math.min(boss.ttl, 5.2);
       }
     }
   }
@@ -3377,22 +3416,34 @@ function drawBoss(sx, sy){
   if (x<-900 || y<-900 || x>W+900 || y>H+900) return;
 
   ctx.save();
-  // ominous halo
+  const telegraph = boss.grace > 0;
+
+  // ominous halo / warmup halo
   const glow = ctx.createRadialGradient(x,y, 5, x,y, boss.r*2.6);
-  glow.addColorStop(0, 'rgba(255,40,40,0.22)');
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  if (telegraph) {
+    glow.addColorStop(0, 'rgba(255,210,90,0.20)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+  } else {
+    glow.addColorStop(0, 'rgba(255,40,40,0.22)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+  }
   ctx.fillStyle = glow;
   ctx.beginPath(); ctx.arc(x,y,boss.r*2.6,0,TAU); ctx.fill();
 
   // body
   const g = ctx.createLinearGradient(x-boss.r,y-boss.r,x+boss.r,y+boss.r);
-  g.addColorStop(0,'#2A0000');
-  g.addColorStop(1,'#130000');
+  if (telegraph) {
+    g.addColorStop(0,'#3A2300');
+    g.addColorStop(1,'#1E1200');
+  } else {
+    g.addColorStop(0,'#2A0000');
+    g.addColorStop(1,'#130000');
+  }
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(x,y,boss.r,0,TAU); ctx.fill();
 
   // spikes
-  ctx.strokeStyle = 'rgba(255,120,120,0.65)';
+  ctx.strokeStyle = telegraph ? 'rgba(255,220,150,0.75)' : 'rgba(255,120,120,0.65)';
   ctx.lineWidth = 3*DPR;
   const n = 22;
   for (let i=0;i<n;i++){
