@@ -86,7 +86,7 @@
     <canvas id="c"></canvas>
   </div>
 
-  <div class="hud">
+  <div class="hud" id="hudBar">
     <div class="pill" title="Время текущего забега"><span>⏱️</span><span class="lbl">Время</span> <b id="t">0.0s</b></div>
     <div class="pill" title="Монеты: рост шара, хвоста и прогресс забега"><span>🪙</span><span class="lbl">Монеты</span> <b id="coins">0</b></div>
     <div class="pill" title="Текущий размер шара относительно старта"><span>⚫</span><span class="lbl">Размер</span> <b id="mass">1.0x</b></div>
@@ -114,7 +114,7 @@
 </div>
 
 <div id="netMini" style="
-  position:fixed; left:16px; top:86px; z-index:9998;
+  position:fixed; left:16px; top:132px; z-index:9998;
   min-width:200px; max-width:260px;
   padding:10px 12px;
   border-radius:16px;
@@ -135,7 +135,7 @@
 </div>
 
 <div id="onlinePanel" style="
-  position:fixed; right:16px; top:86px; z-index:9999;
+  position:fixed; right:16px; top:132px; z-index:9999;
   width:280px; padding:12px;
   border-radius:16px; background:rgba(10, 14, 28, .62);
   border:1px solid rgba(90, 140, 255, .15);
@@ -3865,6 +3865,9 @@ function drawPlayerOutline(x,y,r){
   onlineInitUI();
   onlineRefresh();
   netConnect();
+  layoutFloatingPanels();
+  window.addEventListener('resize', layoutFloatingPanels);
+  window.addEventListener('orientationchange', layoutFloatingPanels);
 
   resetGame();
   requestAnimationFrame(loop);
