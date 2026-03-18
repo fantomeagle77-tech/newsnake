@@ -258,13 +258,20 @@
     let enabled = (localStorage.getItem(LS_SFX) ?? '1') === '1';
     let musicOn = (localStorage.getItem(LS_MUS) ?? '0') === '1'; // default OFF (важно)
     let sfxVol = parseFloat(localStorage.getItem(LS_SFXV) ?? '0.65');
-    let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.20');
+    let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.24');
 
     let musicTimer = null;
-    let musicPulseTimer = null;
     let musicPhase = 0;
-    let musicDayKey = 0;
-    let musicProfile = null;
+    let ambientAudio = null;
+    let ambientTrackIndex = -1;
+    let ambientFadeTimer = null;
+
+    const AMBIENT_TRACKS = [
+      'audio/ambient_01.ogg',
+      'audio/ambient_02.ogg',
+      'audio/ambient_03.ogg',
+      'audio/ambient_04.ogg'
+    ];
 
     function ensure() {
       if (ctx) return;
@@ -283,7 +290,6 @@
       if (ctx.state !== 'running') {
         try { await ctx.resume(); } catch(e) {}
       }
-      // музыка НЕ стартует сама — только по кнопке
       return true;
     }
 
@@ -313,191 +319,98 @@
       musVol = Math.max(0, Math.min(1, v));
       localStorage.setItem(LS_MUSV, String(musVol));
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
+      if (ambientAudio) ambientAudio.volume = musicOn ? musVol : 0;
+    }
+
+    function clearAmbientFade() {
+      if (ambientFadeTimer) {
+        clearInterval(ambientFadeTimer);
+        ambientFadeTimer = null;
+      }
+    }
+
+    function chooseAmbientTrackIndex() {
+      const seed = (typeof dailySeedUTC === 'function' ? dailySeedUTC() : Date.now()) >>> 0;
+      return AMBIENT_TRACKS.length ? (seed % AMBIENT_TRACKS.length) : 0;
+    }
+
+    function ensureAmbientAudio() {
+      if (ambientAudio) return ambientAudio;
+
+      ambientAudio = new Audio();
+      ambientAudio.preload = 'auto';
+      ambientAudio.loop = true;
+      ambientAudio.volume = 0;
+      ambientAudio.crossOrigin = 'anonymous';
+
+      ambientAudio.addEventListener('error', () => {
+        if (!AMBIENT_TRACKS.length) return;
+        ambientTrackIndex = (ambientTrackIndex + 1) % AMBIENT_TRACKS.length;
+        ambientAudio.src = AMBIENT_TRACKS[ambientTrackIndex];
+        if (musicOn) {
+          ambientAudio.play().catch(() => {});
+        }
+      });
+
+      return ambientAudio;
+    }
+
+    function fadeAmbientTo(target, ms = 650, onDone = null) {
+      if (!ambientAudio) {
+        if (onDone) onDone();
+        return;
+      }
+
+      clearAmbientFade();
+      const start = ambientAudio.volume;
+      const delta = target - start;
+      const steps = Math.max(1, Math.round(ms / 40));
+      let i = 0;
+
+      ambientFadeTimer = setInterval(() => {
+        i++;
+        const t = i / steps;
+        ambientAudio.volume = Math.max(0, Math.min(1, start + delta * t));
+        if (i >= steps) {
+          clearAmbientFade();
+          ambientAudio.volume = Math.max(0, Math.min(1, target));
+          if (onDone) onDone();
+        }
+      }, 40);
     }
 
     function stopMusic() {
       if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
-      if (musicPulseTimer) { clearTimeout(musicPulseTimer); musicPulseTimer = null; }
+      clearAmbientFade();
+      if (ambientAudio) {
+        const a = ambientAudio;
+        fadeAmbientTo(0, 450, () => {
+          try { a.pause(); } catch (e) {}
+        });
+      }
     }
 
-    function makeDailyMusicProfile() {
-      const day = dailySeedUTC() >>> 0;
-      const presets = [
-        { name:'void',   root:130.81, scale:[0,2,7,9],   lp:1500, stepMin:2200, stepMax:3600, oscA:'sine',     oscB:'triangle', spread:3 },
-        { name:'nebula', root:164.81, scale:[0,4,7,11],  lp:1850, stepMin:1800, stepMax:3100, oscA:'triangle', oscB:'sine',     spread:4 },
-        { name:'ice',    root:196.00, scale:[0,5,9,12],  lp:2200, stepMin:2000, stepMax:3400, oscA:'sine',     oscB:'sine',     spread:2 },
-        { name:'toxic',  root:146.83, scale:[0,3,7,10],  lp:1650, stepMin:1700, stepMax:2900, oscA:'triangle', oscB:'triangle', spread:4 },
-        { name:'lava',   root:110.00, scale:[0,5,7,10],  lp:1300, stepMin:1600, stepMax:2700, oscA:'triangle', oscB:'sine',     spread:4 },
-      ];
-      const preset = presets[day % presets.length];
-      return { day, ...preset };
-    }
-
-    function musicVoice(freq, start, dur, vol, type='sine', lp=700, detune=0) {
-      if (!ctx || !musGain) return;
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const f = ctx.createBiquadFilter();
-
-      o.type = type;
-      o.frequency.setValueAtTime(freq, start);
-      o.detune.setValueAtTime(detune, start);
-
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(lp, start);
-      f.Q.setValueAtTime(0.8, start);
-
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), start + 0.9);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * 0.42), start + Math.max(1.5, dur * 0.55));
-      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-
-      o.connect(f);
-      f.connect(g);
-      g.connect(musGain);
-
-      o.start(start);
-      o.stop(start + dur + 0.08);
-    }
-
-    function musicKick(start, baseFreq = 96, vol = 0.24) {
-      if (!ctx || !musGain) return;
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const f = ctx.createBiquadFilter();
-
-      o.type = 'sine';
-      o.frequency.setValueAtTime(baseFreq * 1.06, start);
-      o.frequency.exponentialRampToValueAtTime(baseFreq, start + 0.18);
-
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(1100, start);
-      f.Q.setValueAtTime(0.35, start);
-
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.020 * vol, start + 0.04);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.70);
-
-      o.connect(f);
-      f.connect(g);
-      g.connect(musGain);
-
-      o.start(start);
-      o.stop(start + 0.78);
-    }
-
-    function musicSubPulse(start, freq = 92, dur = 2.0, vol = 0.26) {
-      if (!ctx || !musGain) return;
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      const f = ctx.createBiquadFilter();
-
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(freq, start);
-
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(900, start);
-      f.Q.setValueAtTime(0.35, start);
-
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.018 * vol, start + 0.14);
-      g.gain.exponentialRampToValueAtTime(0.010 * vol, start + 0.92);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-
-      o.connect(f);
-      f.connect(g);
-      g.connect(musGain);
-
-      o.start(start);
-      o.stop(start + dur + 0.05);
-    }
-
-    function startMusicPulse() {
-      if (!musicOn || !ctx) return;
-
-      const pulseLoop = () => {
-        if (!musicOn || !ctx) return;
-
-        const today = dailySeedUTC() >>> 0;
-        if (!musicProfile || musicDayKey !== today) {
-          musicProfile = makeDailyMusicProfile();
-          musicDayKey = musicProfile.day;
-        }
-
-        const p = musicProfile;
-        const now = ctx.currentTime;
-
-        let kickBase = 98, subBase = 90, intervalMin = 5200, intervalMax = 8400;
-        if (p.name === 'void')   { kickBase = 94; subBase = 86; intervalMin = 6200; intervalMax = 9200; }
-        if (p.name === 'nebula') { kickBase = 106; subBase = 98; intervalMin = 4800; intervalMax = 7600; }
-        if (p.name === 'ice')    { kickBase = 118; subBase = 108; intervalMin = 5400; intervalMax = 8200; }
-        if (p.name === 'toxic')  { kickBase = 100; subBase = 92; intervalMin = 5000; intervalMax = 7800; }
-        if (p.name === 'lava')   { kickBase = 92; subBase = 84; intervalMin = 4600; intervalMax = 7200; }
-
-        musicSubPulse(now, subBase, 2.0, 0.24);
-        if (Math.random() < 0.10) musicKick(now + 0.22, kickBase, 0.22);
-
-        const next = intervalMin + Math.random() * (intervalMax - intervalMin);
-        musicPulseTimer = setTimeout(pulseLoop, next);
-      };
-
-      pulseLoop();
-    }
-
-    function startMusic() {
+    async function startMusic() {
       ensure();
       stopMusic();
 
-      musicPhase = 0;
-      musicDayKey = 0;
-      musicProfile = null;
+      if (!AMBIENT_TRACKS.length) return;
+      const a = ensureAmbientAudio();
+      const idx = chooseAmbientTrackIndex();
+      if (ambientTrackIndex !== idx || !a.src) {
+        ambientTrackIndex = idx;
+        a.src = AMBIENT_TRACKS[ambientTrackIndex];
+      }
 
-      startMusicPulse();
+      a.currentTime = 0;
+      a.volume = 0;
 
-      const playOne = () => {
-        if (!musicOn || !ctx) return;
-
-        const today = dailySeedUTC() >>> 0;
-        if (!musicProfile || musicDayKey !== today) {
-          musicProfile = makeDailyMusicProfile();
-          musicDayKey = musicProfile.day;
-          musicPhase = 0;
-        }
-
-        const now = ctx.currentTime;
-        const p = musicProfile;
-        const scale = p.scale;
-
-        const degreeA = scale[musicPhase % scale.length];
-        const degreeB = scale[(musicPhase + 2) % scale.length];
-        const degreeC = scale[(musicPhase + 1) % scale.length];
-
-        const baseFreq = p.root * Math.pow(2, degreeA / 12);
-        const upperFreq = p.root * Math.pow(2, (degreeB + 12) / 12);
-        const midFreq = p.root * Math.pow(2, (degreeC + 9) / 12);
-        const airFreq = p.root * Math.pow(2, (degreeB + 19) / 12);
-
-        musicVoice(baseFreq, now, 4.2 + Math.random()*1.0, 0.036, p.oscA, p.lp, -p.spread * 0.2);
-        musicVoice(midFreq, now + 0.14, 3.4 + Math.random()*0.8, 0.026, p.oscB, p.lp + 240, p.spread * 0.28);
-
-        if (Math.random() < 0.96) {
-          musicVoice(upperFreq, now + 0.30, 3.6 + Math.random()*0.8, 0.024, 'sine', p.lp + 520, -p.spread * 0.15);
-        }
-
-        if (Math.random() < 0.72) {
-          musicVoice(airFreq, now + 0.42, 2.8 + Math.random()*0.7, 0.016, 'sine', p.lp + 900, 0);
-        }
-
-        musicPhase = (musicPhase + 1) % (scale.length * 2);
-
-        const next = p.stepMin + Math.random() * (p.stepMax - p.stepMin);
-        musicTimer = setTimeout(playOne, next);
-      };
-
-      playOne();
+      try {
+        await a.play();
+        fadeAmbientTo(musicOn ? musVol : 0, 900);
+      } catch (e) {
+        // ждём следующего явного клика по кнопке музыки
+      }
     }
 
     async function toggleMusic() {
@@ -505,7 +418,7 @@
       musicOn = !musicOn;
       localStorage.setItem(LS_MUS, musicOn ? '1' : '0');
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
-      if (musicOn) startMusic(); else stopMusic();
+      if (musicOn) await startMusic(); else stopMusic();
       return musicOn;
     }
 
@@ -1073,7 +986,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
 
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      drawNetPlayer(x, y, p.r * viewZoom, p.name, p.color, rel);
+      drawNetPlayer(x, y, p.r, p.name, p.color, rel);
     }
   }
 
@@ -1081,18 +994,17 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (!NET_ENABLED) return;
     const x = W / 2;
     const y = H / 2;
-    const r = player.r * viewZoom;
+    const r = player.r;
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,0.86)';
-    ctx.lineWidth = 6 * DPR;
-    ctx.font = `${Math.max(15 * DPR, r * 0.50)}px system-ui,Segoe UI,Arial`;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 5 * DPR;
+    ctx.font = `${Math.max(12 * DPR, r * 0.42)}px system-ui,Segoe UI,Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    const labelY = y - r - 14 * DPR;
-    ctx.strokeText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, labelY);
-    ctx.fillStyle = 'rgba(120,255,190,0.99)';
-    ctx.fillText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, labelY);
+    ctx.strokeText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 12 * DPR);
+    ctx.fillStyle = 'rgba(120,255,190,0.98)';
+    ctx.fillText(`Ты: ${String(ONLINE.name || 'anon').slice(0,18)}`, x, y - r - 12 * DPR);
     ctx.restore();
   }
 
@@ -1113,19 +1025,18 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       if (x < -260 || y < -260 || x > W + 260 || y > H + 260) continue;
 
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
-      const pr = p.r * viewZoom;
-      const labelY = y - pr - 14 * DPR;
+      const labelY = y - p.r - 14 * DPR;
 
       ctx.fillStyle = p.color || '#79C8FF';
       ctx.globalAlpha = 0.55;
       ctx.beginPath();
-      ctx.arc(x, y, Math.max(6 * DPR, pr * 0.34), 0, TAU);
+      ctx.arc(x, y, Math.max(6 * DPR, p.r * 0.34), 0, TAU);
       ctx.fill();
       ctx.globalAlpha = 1;
 
       ctx.lineWidth = 5 * DPR;
       ctx.strokeStyle = 'rgba(0,0,0,0.82)';
-      ctx.font = `${Math.max(12 * DPR, pr * 0.44)}px system-ui,Segoe UI,Arial`;
+      ctx.font = `${Math.max(12 * DPR, p.r * 0.44)}px system-ui,Segoe UI,Arial`;
       const nm = String(p.name || 'anon').slice(0,18);
       ctx.strokeText(nm, x, labelY);
 
@@ -1616,111 +1527,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     return c;
   }
 
-  function getMineWorldPos(m, lvl) {
-    const mx = m.x + Math.cos(m.phase || 0) * (10 + lvl * 0.2);
-    const my = m.y + Math.sin((m.phase || 0) * 1.1) * (10 + lvl * 0.2);
-    return { x: mx, y: my, r: m.r };
-  }
-
-  function sampleAiHazards(wx, wy, bodyR, lvl) {
-    const scanR = Math.max(220, bodyR * 4.2);
-    const cx0 = Math.floor((wx - scanR) / CHUNK);
-    const cx1 = Math.floor((wx + scanR) / CHUNK);
-    const cy0 = Math.floor((wy - scanR) / CHUNK);
-    const cy1 = Math.floor((wy + scanR) / CHUNK);
-
-    let ax = 0, ay = 0;
-    let blocked = 0;
-    let hitMine = false, hitVirus = false, hitMimic = false, inSlime = false;
-
-    for (let cy = cy0; cy <= cy1; cy++) {
-      for (let cx = cx0; cx <= cx1; cx++) {
-        const ch = getChunk(cx, cy, lvl);
-
-        if (ch.mines) {
-          for (const m of ch.mines) {
-            const mp = getMineWorldPos(m, lvl);
-            const dx = wx - mp.x;
-            const dy = wy - mp.y;
-            const d2 = dx*dx + dy*dy;
-            const safe = bodyR + mp.r * 0.92 + 22;
-            if (d2 < safe * safe) {
-              const d = Math.sqrt(d2) || 1;
-              const k = 1 - d / safe;
-              ax += (dx / d) * (120 + 260 * k);
-              ay += (dy / d) * (120 + 260 * k);
-              blocked += k * 0.9;
-              if (d2 < (bodyR + mp.r * 0.78) ** 2) hitMine = true;
-            }
-          }
-        }
-
-        if (ch.viruses) {
-          for (const v of ch.viruses) {
-            if (collected.has(v.id)) continue;
-            const dx = wx - v.x;
-            const dy = wy - v.y;
-            const d2 = dx*dx + dy*dy;
-            const safe = bodyR + v.r * 0.88 + 18;
-            if (d2 < safe * safe) {
-              const d = Math.sqrt(d2) || 1;
-              const k = 1 - d / safe;
-              ax += (dx / d) * (90 + 180 * k);
-              ay += (dy / d) * (90 + 180 * k);
-              blocked += k * 0.65;
-              if (d2 < (bodyR + v.r * 0.72) ** 2) hitVirus = true;
-            }
-          }
-        }
-
-        if (ch.mimics) {
-          for (const mm of ch.mimics) {
-            if (collected.has(mm.id)) continue;
-            const dx = wx - mm.x;
-            const dy = wy - mm.y;
-            const d2 = dx*dx + dy*dy;
-            const safe = bodyR + mm.r * 0.92 + 18;
-            if (d2 < safe * safe) {
-              const d = Math.sqrt(d2) || 1;
-              const k = 1 - d / safe;
-              ax += (dx / d) * (80 + 140 * k);
-              ay += (dy / d) * (80 + 140 * k);
-              blocked += k * 0.55;
-              if (d2 < (bodyR + mm.r * 0.74) ** 2) hitMimic = true;
-            }
-          }
-        }
-
-        if (ch.slimes) {
-          for (const s of ch.slimes) {
-            const dx = wx - s.x;
-            const dy = wy - s.y;
-            const d2 = dx*dx + dy*dy;
-            const safe = bodyR + s.r * 0.88;
-            if (d2 < safe * safe) {
-              const d = Math.sqrt(d2) || 1;
-              const k = 1 - d / safe;
-              ax += (dx / d) * (40 + 80 * k);
-              ay += (dy / d) * (40 + 80 * k);
-              blocked += k * 0.22;
-              inSlime = true;
-            }
-          }
-        }
-      }
-    }
-
-    return {
-      ax: clamp(ax, -260, 260),
-      ay: clamp(ay, -260, 260),
-      blocked,
-      hitMine,
-      hitVirus,
-      hitMimic,
-      inSlime,
-    };
-  }
-
   // ==========================
   // Player / Game state
   // ==========================
@@ -1763,14 +1569,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
   // camera (world->screen)
   const cam = { x:0, y:0 };
-  let viewZoom = 1;
-
-  function getViewZoom() {
-    const ratio = Math.max(1, player.r / player.baseR);
-    return clamp(1 / (1 + Math.max(0, Math.log2(ratio)) * 0.18), 0.58, 1.0);
-  }
-  function screenToWorldX(screenX) { return cam.x + (screenX - W/2) / viewZoom; }
-  function screenToWorldY(screenY) { return cam.y + (screenY - H/2) / viewZoom; }
 
   let timeSurv = 0;
   let level = 1;
@@ -1787,7 +1585,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   const swarms = []; // list of drones {x,y,vx,vy,r,kind,hue,ttl}
   let swarmCd = 6.0;
 
-  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0, warmup:0, retreat:0, hitCd:0, mineCd:0, stuckT:0};
+  const boss = {active:false, x:0, y:0, r:260, vx:0, vy:0, ttl:0, cd:18.0, phase:0, warmup:0, retreat:0, hitCd:0};
 
 
   // ==========================
@@ -1814,8 +1612,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.warmup = 0;
     boss.retreat = 0;
     boss.hitCd = 0;
-    boss.mineCd = 0;
-    boss.stuckT = 0;
   }
 
   function resetTransientFX() {
@@ -1884,11 +1680,11 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     ctx.globalCompositeOperation = 'lighter';
     for (const p of fx){
       const x = sx(p.x), y = sy(p.y);
-      const g = ctx.createRadialGradient(x,y,0,x,y,p.r*5*viewZoom);
+      const g = ctx.createRadialGradient(x,y,0,x,y,p.r*5);
       g.addColorStop(0, `hsla(${p.hue},100%,70%,0.55)`);
       g.addColorStop(1, `hsla(${p.hue},100%,60%,0)`);
       ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x,y,p.r*5*viewZoom,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x,y,p.r*5,0,TAU); ctx.fill();
     }
     ctx.restore();
   }
@@ -1989,6 +1785,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   });
 
   AudioFX.autoUnlock();
+  document.getElementById("btnMusic").style.opacity = ((localStorage.getItem('newsnake_mus') ?? '0') === '1') ? "1" : "0.55";
 
 	document.getElementById("btnSound").onclick = async () => {
 	  await AudioFX.unlock();
@@ -2150,8 +1947,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.warmup = 1.8;
     boss.retreat = 0;
     boss.hitCd = 0;
-    boss.mineCd = 0;
-    boss.stuckT = 0;
     boss.active = true;
     kickShake(6, 0.10);
   }
@@ -2174,7 +1969,6 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     boss.warmup = Math.max(0, boss.warmup - dt);
     boss.retreat = Math.max(0, boss.retreat - dt);
     boss.hitCd = Math.max(0, boss.hitCd - dt);
-    boss.mineCd = Math.max(0, boss.mineCd - dt);
 
     if (boss.ttl <= 0) {
       boss.active = false;
@@ -2201,49 +1995,16 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     if (boss.retreat > 0) sp *= 0.68;
     if (player.spawnGrace > 0) sp *= 0.08;
 
-    const avoid = sampleAiHazards(boss.x, boss.y, boss.r * 0.55, level);
-
     boss.phase += dt * (boss.warmup > 0 ? 0.66 : 0.88);
     const wx = Math.cos(boss.phase) * 16;
     const wy = Math.sin(boss.phase*1.1) * 16;
 
     const dirMul = (boss.retreat > 0 || player.spawnGrace > 0) ? -1 : 1;
-    const prevX = boss.x, prevY = boss.y;
-
-    boss.vx = boss.vx*0.90 + ((nx*dirMul)*sp + wx + avoid.ax*0.74)*0.20;
-    boss.vy = boss.vy*0.90 + ((ny*dirMul)*sp + wy + avoid.ay*0.74)*0.20;
-
-    if (avoid.inSlime) {
-      boss.vx *= 0.90;
-      boss.vy *= 0.90;
-    }
+    boss.vx = boss.vx*0.90 + ((nx*dirMul)*sp + wx)*0.20;
+    boss.vy = boss.vy*0.90 + ((ny*dirMul)*sp + wy)*0.20;
 
     boss.x += boss.vx * dt;
     boss.y += boss.vy * dt;
-
-    const moved = Math.hypot(boss.x - prevX, boss.y - prevY);
-    if (avoid.blocked > 0.52 && moved < 22 * dt) boss.stuckT += dt;
-    else boss.stuckT = Math.max(0, boss.stuckT - dt * 1.5);
-
-    if ((avoid.hitMine || avoid.hitVirus || avoid.hitMimic) && boss.mineCd <= 0) {
-      boss.mineCd = 1.25;
-      boss.retreat = Math.max(boss.retreat, 2.0);
-      boss.warmup = Math.max(boss.warmup, 0.75);
-      boss.phase += (Math.random() < 0.5 ? -1 : 1) * 0.9;
-      boss.vx -= nx * 180;
-      boss.vy -= ny * 180;
-      spawnBurst(boss.x, boss.y, 8, 12, 180);
-      kickShake(5, 0.08);
-    }
-
-    if (boss.stuckT > 2.8) {
-      boss.stuckT = 0;
-      boss.retreat = Math.max(boss.retreat, 2.2);
-      boss.warmup = Math.max(boss.warmup, 0.9);
-      boss.phase += Math.PI * 0.65;
-      boss.vx += (-ny) * 220;
-      boss.vy += ( nx) * 220;
-    }
 
     if (d < 1350) {
       player.nearMiss += dt * 0.7;
@@ -2282,8 +2043,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   // ==========================
   function doDash() {
     // dash in direction of mouse target
-    const tx = screenToWorldX(mouseX);
-    const ty = screenToWorldY(mouseY);
+    const tx = cam.x + (mouseX - W/2);
+    const ty = cam.y + (mouseY - H/2);
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2307,8 +2068,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     player.ejectCd = 0.18;
 
     // aim direction (world)
-    const tx = screenToWorldX(mouseX);
-    const ty = screenToWorldY(mouseY);
+    const tx = cam.x + (mouseX - W/2);
+    const ty = cam.y + (mouseY - H/2);
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2419,8 +2180,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
       }
 
       // Move target in WORLD coords: cursor relative to screen center
-      const targetX = screenToWorldX(mouseX);
-      const targetY = screenToWorldY(mouseY);
+      const targetX = cam.x + (mouseX - W/2);
+      const targetY = cam.y + (mouseY - H/2);
 
       // Inertia follow
       const dx = targetX - player.x;
@@ -2581,7 +2342,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
             if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
               collected.add(ss.id);
               player.shieldHits = 1;
-              player.shieldTime = 8.0;
+              player.shieldTime = 16.0;
               player.score += 40;
               spawnBurst(ss.x, ss.y, 220, 14, 200);
             }
@@ -2667,8 +2428,6 @@ if (ch.cells) {
   for (const cc of ch.cells) {
     if (collected.has(cc.id)) continue;
 
-    const prevX = cc.x, prevY = cc.y;
-
     // wander
     cc.phase += dt * (0.65 + level*0.02) * cc.drift;
     const baseSp = (cc.kind === 'runner') ? 80 : (cc.kind === 'bully' ? 55 : 45);
@@ -2680,11 +2439,9 @@ if (ch.cells) {
     const d = Math.hypot(dx, dy) || 1;
 
     cc.contactCd = Math.max(0, (cc.contactCd || 0) - dt);
-    cc.stuckT = Math.max(0, (cc.stuckT || 0) - dt * 0.35);
 
     const youBigger = player.r > cc.r * 1.12;
     const youSmaller = player.r < cc.r * 0.92;
-    const avoid = sampleAiHazards(cc.x, cc.y, cc.r * 0.95, level);
 
     // behavior near player
     if (d < 560) {
@@ -2701,41 +2458,15 @@ if (ch.cells) {
       }
     }
 
-    // hazards / obstacles
-    vx += avoid.ax * 0.95;
-    vy += avoid.ay * 0.95;
-    if (avoid.inSlime) {
-      vx *= 0.86;
-      vy *= 0.86;
-    }
-
     // integrate (smooth)
     cc.vx = cc.vx * 0.84 + vx * 0.32;
     cc.vy = cc.vy * 0.84 + vy * 0.32;
     cc.x += cc.vx * dt;
     cc.y += cc.vy * dt;
 
-    const moved = Math.hypot(cc.x - prevX, cc.y - prevY);
-    if (avoid.blocked > 0.48 && moved < 20 * dt && d < 620) cc.stuckT += dt;
-    else cc.stuckT = Math.max(0, cc.stuckT - dt * 1.6);
-
-    if (avoid.hitMine || avoid.hitVirus || avoid.hitMimic) {
-      collected.add(cc.id);
-      spawnBurst(cc.x, cc.y, cc.hue, 10, 180);
-      continue;
-    }
-    if (cc.stuckT > 2.8) {
-      collected.add(cc.id);
-      spawnBurst(cc.x, cc.y, cc.hue, 8, 160);
-      continue;
-    }
-
     // collisions: bigger eats smaller
-    const pdx = player.x - cc.x;
-    const pdy = player.y - cc.y;
-    const pd = Math.hypot(pdx, pdy) || 1;
     const rr = player.r + cc.r;
-    if (player.invulnTime <= 0 && pd < rr) {
+    if (player.invulnTime <= 0 && d < rr) {
       if (player.r > cc.r * 1.12) {
         collected.add(cc.id);
         const gain = Math.max(2, Math.floor(cc.r / 10));
@@ -2746,8 +2477,8 @@ if (ch.cells) {
       } else if (player.r < cc.r * 0.92) {
         damagePlayer();
         cc.contactCd = 1.4;
-        cc.vx -= (pdx/pd) * 180;
-        cc.vy -= (pdy/pd) * 180;
+        cc.vx -= (dx/d) * 180;
+        cc.vy -= (dy/d) * 180;
         player.coins = Math.max(0, player.coins - 6);
       } else {
         cc.contactCd = 0.9;
@@ -2832,13 +2563,10 @@ if (ch.hunters) {
   for (const h of ch.hunters) {
     if (collected.has(h.id)) continue;
 
-    const prevX = h.x, prevY = h.y;
-
     // timers
     h.cd = Math.max(0, (h.cd||0) - dt);
     h.charge = Math.max(0, (h.charge||0) - dt);
     h.backoff = Math.max(0, (h.backoff||0) - dt);
-    h.stuckT = Math.max(0, (h.stuckT||0) - dt * 0.30);
 
     // wander
     h.phase += dt * (0.55 + level*0.02) * h.drift;
@@ -2848,8 +2576,6 @@ if (ch.hunters) {
     const dx = player.x - h.x;
     const dy = player.y - h.y;
     const d = Math.hypot(dx, dy) || 1;
-    const charging = h.charge > 0;
-    const avoid = sampleAiHazards(h.x, h.y, h.r * 0.98, level);
 
     // behavior
     if (h.backoff > 0 || player.spawnGrace > 0) {
@@ -2919,54 +2645,16 @@ if (ch.hunters) {
       }
     }
 
-    // hazards / obstacles
-    const avoidMul = charging ? 0.65 : 1.08;
-    vx += avoid.ax * avoidMul;
-    vy += avoid.ay * avoidMul;
-    if (avoid.inSlime) {
-      vx *= 0.82;
-      vy *= 0.82;
-    }
-
     // move
-    h.vx = vx;
-    h.vy = vy;
     h.x += vx * dt;
     h.y += vy * dt;
-
-    const moved = Math.hypot(h.x - prevX, h.y - prevY);
-    if (avoid.blocked > 0.52 && moved < 24 * dt && d < 860) h.stuckT += dt;
-    else h.stuckT = Math.max(0, h.stuckT - dt * 1.5);
-
-    if (avoid.hitMine || avoid.hitVirus || avoid.hitMimic) {
-      if (h.kind === 'charger' || h.r < 46) {
-        collected.add(h.id);
-        spawnBurst(h.x, h.y, h.hue || 20, 14, 220);
-        continue;
-      } else {
-        h.backoff = Math.max(h.backoff, 2.0);
-        h.cd = Math.max(h.cd, 1.0);
-        h.charge = 0;
-        h.phase += (Math.random() < 0.5 ? -1 : 1) * 0.8;
-        spawnBurst(h.x, h.y, h.hue || 20, 10, 180);
-      }
-    }
-
-    if (h.stuckT > 3.2) {
-      collected.add(h.id);
-      spawnBurst(h.x, h.y, h.hue || 20, 12, 190);
-      continue;
-    }
 
     // adrenaline when close
     if (d < (player.r + h.r + 140)) player.nearMiss += dt * 0.9;
 
     // collision rules: bigger eats smaller
-    const pdx = player.x - h.x;
-    const pdy = player.y - h.y;
-    const pd = Math.hypot(pdx, pdy) || 1;
     const rr = player.r + h.r;
-    if (player.invulnTime <= 0 && pd < rr) {
+    if (player.invulnTime <= 0 && d < rr) {
       if (player.r > h.r * 1.15) {
         collected.add(h.id);
         const gain = Math.max(8, Math.floor(h.r / 7));
@@ -2978,8 +2666,8 @@ if (ch.hunters) {
       } else if (player.r < h.r * 1.08) {
         damagePlayer();
         h.backoff = 1.8;
-        h.vx = (h.vx || 0) - (pdx/pd) * 240;
-        h.vy = (h.vy || 0) - (pdy/pd) * 240;
+        h.vx -= (dx/d) * 240;
+        h.vy -= (dy/d) * 240;
         player.coins = Math.max(0, player.coins - 10);
       } else {
         h.backoff = 1.0;
@@ -3137,28 +2825,35 @@ function pathWobblyConeMask(cx, cy, ang, len, half, amp, t) {
 
 
 function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
-  // Real flashlight cone with narrow neck and soft rounded head (uses maskCtx)
-  const dirX = Math.cos(ang), dirY = Math.sin(ang);
-  const sideX = -dirY, sideY = dirX;
+  // Rounded "capsule wedge" beam (uses maskCtx)
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const lx = -dy, ly = dx;
 
-  const neckLen = Math.min(len * 0.14, startR * 3.2);
-  const sx = px + dirX * (startR * 0.55);
-  const sy = py + dirY * (startR * 0.55);
-  const nx = px + dirX * neckLen;
-  const ny = py + dirY * neckLen;
-  const ex = px + dirX * len;
-  const ey = py + dirY * len;
+  // shift start a bit forward so it doesn't look like a bubble
+  const sx = px + dx * (startR * 0.6);
+  const sy = py + dy * (startR * 0.6);
 
-  const sHalf = startR * 0.62;
-  const nHalf = Math.max(sHalf * 1.15, endR * 0.18);
+  const ex = px + dx * len;
+  const ey = py + dy * len;
+
+  // left/right edges
+  const ax = sx + lx * startR, ay = sy + ly * startR;
+  const bx = ex + lx * endR,   by = ey + ly * endR;
+  const cx = ex - lx * endR,   cy = ey - ly * endR;
+  const dx2= sx - lx * startR, dy2= sy - ly * startR;
 
   maskCtx.beginPath();
-  maskCtx.moveTo(px + sideX * sHalf, py + sideY * sHalf);
-  maskCtx.quadraticCurveTo(sx + sideX * sHalf, sy + sideY * sHalf, nx + sideX * nHalf, ny + sideY * nHalf);
-  maskCtx.lineTo(ex + sideX * endR, ey + sideY * endR);
-  maskCtx.quadraticCurveTo(ex + dirX * endR * 0.22, ey + dirY * endR * 0.22, ex - sideX * endR, ey - sideY * endR);
-  maskCtx.lineTo(nx - sideX * nHalf, ny - sideY * nHalf);
-  maskCtx.quadraticCurveTo(sx - sideX * sHalf, sy - sideY * sHalf, px - sideX * sHalf, py - sideY * sHalf);
+  maskCtx.moveTo(ax, ay);
+  maskCtx.lineTo(bx, by);
+
+  // round head
+  maskCtx.arc(ex, ey, endR, ang + Math.PI/2, ang - Math.PI/2, true);
+
+  maskCtx.lineTo(dx2, dy2);
+
+  // small round at start
+  maskCtx.arc(sx, sy, startR, ang - Math.PI/2, ang + Math.PI/2, true);
+
   maskCtx.closePath();
 }
   function render() {
@@ -3167,20 +2862,16 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0,0,W,H);
 
-  // dynamic camera zoom: чем больше шар, тем больше мира видно
-  const sizeRatioR = player.r / player.baseR;
-  viewZoom = getViewZoom();
-
   // screen position of player
-  const px = W/2 + (player.x - cam.x) * viewZoom;
-  const py = H/2 + (player.y - cam.y) * viewZoom;
+  const px = W/2 + (player.x - cam.x);
+  const py = H/2 + (player.y - cam.y);
 
   // update biome for visuals
   currentBiome = biomeOf(Math.floor(player.x / CHUNK), Math.floor(player.y / CHUNK));
 
   // mouse in WORLD coords
-  const tx = screenToWorldX(mouseX);
-  const ty = screenToWorldY(mouseY);
+  const tx = cam.x + (mouseX - W/2);
+  const ty = cam.y + (mouseY - H/2);
 
   let dx = tx - player.x;
   let dy = ty - player.y;
@@ -3189,27 +2880,26 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
 
   const ang = Math.atan2(dy, dx);
 
-  // фонарь в world units чуть ужимается по росту, но камера открывает больше мира
-  const base = Math.min(W, H) * 0.40;
-  const shrink = clamp(level * 20, 0, base * 0.62);
-  const sizePenalty = clamp((sizeRatioR - 1) * 8, 0, base * 0.12);
-  const torchBoost = (player.torchTime > 0) ? base * 1.18 : 0;
-  const vis = clamp(base - shrink - sizePenalty + torchBoost, 320 * DPR, 1220 * DPR);
+  // base visibility (also used as flashlight length)
+  const base = Math.min(W, H) * 0.36;
+  const shrink = clamp(level * 22, 0, base * 0.70);
+  const sizeBoost = clamp((player.r - player.baseR) * 18, 0, base * 0.85);
+  const torchBoost = (player.torchTime > 0) ? base * 1.40 : 0;
+  const vis = clamp(base - shrink + sizeBoost + torchBoost, 240 * DPR, 1200 * DPR);
 
+  const sizeRatioR = player.r / player.baseR;
   const mineScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.45, 1.0);
   const trapScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.55, 1.0);
-  const renderR = player.r * viewZoom;
-  const zoomOpen = clamp((1 - viewZoom) / 0.42, 0, 1);
 
-  // flashlight parameters (screen space)
-  const beamLen = vis * viewZoom * 1.72;
-  const beamHalf = lerp(0.34, 0.27, zoomOpen);
-  const startR = clamp(renderR * 0.34, 16*DPR, 28*DPR);
-  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.84, 96*DPR, 170*DPR);
-  const featherPx = (24 + zoomOpen * 10) * DPR;
+  // flashlight parameters (beam)
+  const beamLen = vis * 1.25;                 // length of the beam
+  const beamHalf = 0.30;                      // half-angle (radians)
+  const startR = clamp(player.r * 0.55, 16*DPR, 34*DPR); // start radius
+  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.9, 70*DPR, 150*DPR); // rounded head radius
+  const featherPx = 28 * DPR;                 // blur for soft edge (vignette)
 
-  // small aura around player
-  const auraR = clamp(renderR * 2.45, 74*DPR, 182*DPR);
+  // small aura around player (3–4 ball radii)
+  const auraR = clamp(player.r * 3.6, 70*DPR, 280*DPR);
 
   // === 1) Draw the WORLD full-screen (it will be masked) ===
   drawBackground();
@@ -3218,17 +2908,15 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   // world -> screen transform
   const sh = (shakeT > 0) ? (Math.sin(performance.now()*0.06) * shakeA * DPR) : 0;
   const sh2 = (shakeT > 0) ? (Math.cos(performance.now()*0.05) * shakeA * DPR) : 0;
-  const sx = (x)=> (x - cam.x) * viewZoom + W/2 + sh;
-  const sy = (y)=> (y - cam.y) * viewZoom + H/2 + sh2;
+  const sx = (x)=> (x - cam.x) + W/2 + sh;
+  const sy = (y)=> (y - cam.y) + H/2 + sh2;
 
   // Determine chunk range based on camera & view
   const pad = VIEW_PAD;
-  const halfW = (W/2 + pad) / viewZoom;
-  const halfH = (H/2 + pad) / viewZoom;
-  const minX = cam.x - halfW;
-  const maxX = cam.x + halfW;
-  const minY = cam.y - halfH;
-  const maxY = cam.y + halfH;
+  const minX = cam.x - (W/2 + pad);
+  const maxX = cam.x + (W/2 + pad);
+  const minY = cam.y - (H/2 + pad);
+  const maxY = cam.y + (H/2 + pad);
 
   const cx0 = Math.floor(minX / CHUNK);
   const cx1 = Math.floor(maxX / CHUNK);
@@ -3244,7 +2932,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         if (collected.has(c.id)) continue;
         const x = sx(c.x), y = sy(c.y);
         if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
-        drawCoin(x,y,c.r * viewZoom);
+        drawCoin(x,y,c.r);
       }
 
       if (ch.heals) {
@@ -3252,7 +2940,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(hh.id)) continue;
           const x = sx(hh.x), y = sy(hh.y);
           if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
-          drawHealOrb(x,y,hh.r * viewZoom,hh.phase);
+          drawHealOrb(x,y,hh.r,hh.phase);
         }
       }
 
@@ -3261,7 +2949,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(ss.id)) continue;
           const x = sx(ss.x), y = sy(ss.y);
           if (x<-90 || y<-90 || x>W+90 || y>H+90) continue;
-          drawShieldOrb(x,y,ss.r * viewZoom,ss.phase);
+          drawShieldOrb(x,y,ss.r,ss.phase);
         }
       }
 
@@ -3271,7 +2959,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(rr.id)) continue;
           const x = sx(rr.x), y = sy(rr.y);
           if (x<-140 || y<-140 || x>W+140 || y>H+140) continue;
-          drawRelic(x,y,rr.r * viewZoom, rr.type);
+          drawRelic(x,y,rr.r, rr.type);
         }
       }
 
@@ -3280,7 +2968,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           if (collected.has(tt.id)) continue;
           const x = sx(tt.x), y = sy(tt.y);
           if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
-          drawTorch(x,y,tt.r * viewZoom);
+          drawTorch(x,y,tt.r);
         }
       }
 
@@ -3289,7 +2977,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-        drawMine(x,y,m.r * mineScaleR * viewZoom, m.armed ?? 0);
+        drawMine(x,y,m.r * mineScaleR);
       }
 // agar-style cells
 if (ch.cells) {
@@ -3299,7 +2987,7 @@ if (ch.cells) {
     if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
     const eatF = 1.12;
     const rel = (player.r > cc.r*eatF) ? 1 : (cc.r > player.r*eatF ? -1 : 0);
-    drawCell(x,y,cc.r * viewZoom,cc.hue,cc.kind,cc.skin,rel);
+    drawCell(x,y,cc.r,cc.hue,cc.kind,cc.skin,rel);
   }
 }
 // virus
@@ -3308,7 +2996,7 @@ if (ch.viruses) {
     if (collected.has(v.id)) continue;
     const x = sx(v.x), y = sy(v.y);
     if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
-    drawVirus(x,y,v.r*trapScaleR*viewZoom,v.phase);
+    drawVirus(x,y,v.r*trapScaleR,v.phase);
   }
 }
 // mimic coin (trap)
@@ -3317,7 +3005,7 @@ if (ch.mimics) {
     if (collected.has(mm.id)) continue;
     const x = sx(mm.x), y = sy(mm.y);
     if (x<-220 || y<-220 || x>W+220 || y>H+220) continue;
-    drawMimic(x,y,mm.r*trapScaleR*viewZoom,mm.phase);
+    drawMimic(x,y,mm.r*trapScaleR,mm.phase);
   }
 }
 // hunters / predators
@@ -3328,7 +3016,7 @@ if (ch.hunters) {
     if (x<-180 || y<-180 || x>W+180 || y>H+180) continue;
     const eatF = 1.12;
     const rel = (player.r > h.r*eatF) ? 1 : (h.r > player.r*eatF ? -1 : 0);
-    drawHunter(x,y,h.r * viewZoom,h.kind,h.hue,h.skin,h.charge>0?1:0,rel);
+    drawHunter(x,y,h.r,h.kind,h.hue,h.skin,h.charge>0?1:0,rel);
   }
 }
     }
@@ -3345,7 +3033,7 @@ if (ch.hunters) {
   for (const p of pellets) {
     const x = sx(p.x), y = sy(p.y);
     if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-    drawPellet(x,y,p.r * viewZoom);
+    drawPellet(x,y,p.r);
   }
 
   // ghost (online)
@@ -3355,20 +3043,22 @@ if (ch.hunters) {
   netDrawPlayers(sx, sy);
 
   // player (world)
-  drawPlayer(sx(player.x), sy(player.y), player.r * viewZoom);
+  drawPlayer(sx(player.x), sy(player.y), player.r);
   if (player.shieldHits > 0) {
     ctx.save();
     const pxs = sx(player.x), pys = sy(player.y);
-    const rg = ctx.createRadialGradient(pxs, pys, player.r*viewZoom*0.3, pxs, pys, player.r*viewZoom*2.2);
+    const rg = ctx.createRadialGradient(pxs, pys, player.r*0.3, pxs, pys, player.r*2.2);
     rg.addColorStop(0, 'rgba(110,170,255,0.10)');
     rg.addColorStop(1, 'rgba(110,170,255,0)');
     ctx.fillStyle = rg;
-    ctx.beginPath(); ctx.arc(pxs, pys, player.r*viewZoom*2.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(pxs, pys, player.r*2.2, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(140,190,255,0.92)';
     ctx.lineWidth = 4 * DPR;
-    ctx.beginPath(); ctx.arc(pxs, pys, player.r * viewZoom * 1.26, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(pxs, pys, player.r * 1.26, 0, TAU); ctx.stroke();
     ctx.restore();
   }
+  drawSelfNick();
+
   if (state === 'RUN') drawTarget(mouseX, mouseY);
 
   // adrenaline overlay (will be masked too)
@@ -3390,14 +3080,14 @@ if (ch.hunters) {
   pathFlashlightBeamMask(px, py, ang, startR, beamLen, endR2);
   maskCtx.fill();
 
-  // local light around player
+  // aura feather
   maskCtx.beginPath();
   maskCtx.arc(px, py, auraR, 0, TAU);
   maskCtx.fill();
 
-  // tighter center core
+  // aura core
   maskCtx.beginPath();
-  maskCtx.arc(px, py, auraR * 0.58, 0, TAU);
+  maskCtx.arc(px, py, auraR, 0, TAU);
   maskCtx.fill();
 
   // soft edge (vignette)
@@ -3424,10 +3114,9 @@ if (ch.hunters) {
   drawTail(sx, sy);
 
   // Player outline on top (always readable)
-  drawPlayerOutline(px, py, player.r * viewZoom);
+  drawPlayerOutline(px, py, player.r);
   drawNetLabelsOnTop(sx, sy);
   drawNetEdgeHints(sx, sy);
-  drawSelfNick();
 }
 
   function drawBackground() {
@@ -3840,30 +3529,29 @@ function drawSwarms(sx, sy){
   for (const s of swarms){
     const x = sx(s.x), y = sy(s.y);
     if (x<-200 || y<-200 || x>W+200 || y>H+200) continue;
-    drawSwarmDrone(x,y,s.r * viewZoom,s.hue,s.kind);
+    drawSwarmDrone(x,y,s.r,s.hue,s.kind);
   }
 }
 
 function drawBoss(sx, sy){
   if (!boss.active) return;
   const x = sx(boss.x), y = sy(boss.y);
-  const br = boss.r * viewZoom;
   if (x<-900 || y<-900 || x>W+900 || y>H+900) return;
 
   ctx.save();
   // ominous halo
-  const glow = ctx.createRadialGradient(x,y, 5, x,y, br*2.6);
+  const glow = ctx.createRadialGradient(x,y, 5, x,y, boss.r*2.6);
   glow.addColorStop(0, 'rgba(255,40,40,0.22)');
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.arc(x,y,br*2.6,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x,y,boss.r*2.6,0,TAU); ctx.fill();
 
   // body
-  const g = ctx.createLinearGradient(x-br,y-br,x+br,y+br);
+  const g = ctx.createLinearGradient(x-boss.r,y-boss.r,x+boss.r,y+boss.r);
   g.addColorStop(0,'#2A0000');
   g.addColorStop(1,'#130000');
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(x,y,br,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x,y,boss.r,0,TAU); ctx.fill();
 
   // spikes
   ctx.strokeStyle = 'rgba(255,120,120,0.65)';
@@ -3871,16 +3559,16 @@ function drawBoss(sx, sy){
   const n = 22;
   for (let i=0;i<n;i++){
     const a = (i/n)*TAU + boss.phase*0.2;
-    const x1 = x + Math.cos(a) * (br*0.92);
-    const y1 = y + Math.sin(a) * (br*0.92);
-    const x2 = x + Math.cos(a) * (br*1.18);
-    const y2 = y + Math.sin(a) * (br*1.18);
+    const x1 = x + Math.cos(a) * (boss.r*0.92);
+    const y1 = y + Math.sin(a) * (boss.r*0.92);
+    const x2 = x + Math.cos(a) * (boss.r*1.18);
+    const y2 = y + Math.sin(a) * (boss.r*1.18);
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
   }
 
   // inner eye
   ctx.fillStyle = 'rgba(255,60,60,0.55)';
-  ctx.beginPath(); ctx.arc(x + br*0.18, y - br*0.12, br*0.22, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + boss.r*0.18, y - boss.r*0.12, boss.r*0.22, 0, TAU); ctx.fill();
 
   ctx.restore();
 }
@@ -4045,7 +3733,7 @@ function drawPlayerOutline(x,y,r){
 
     // glow stroke
     ctx.strokeStyle = `rgba(90,180,255,${a*0.7})`;
-    ctx.lineWidth = (18 + player.r*0.25) * DPR * viewZoom;
+    ctx.lineWidth = (18 + player.r*0.25) * DPR;
     ctx.beginPath();
     for (let i=0;i<tail.points.length;i++){
       const p = tail.points[i];
@@ -4056,7 +3744,7 @@ function drawPlayerOutline(x,y,r){
 
     // core stroke
     ctx.strokeStyle = `rgba(220,245,255,${a})`;
-    ctx.lineWidth = (2.5 + player.r*0.06) * DPR * viewZoom;
+    ctx.lineWidth = (2.5 + player.r*0.06) * DPR;
     ctx.beginPath();
     for (let i=0;i<tail.points.length;i++){
       const p = tail.points[i];
