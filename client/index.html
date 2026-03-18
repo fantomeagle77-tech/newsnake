@@ -30,6 +30,7 @@
       user-select:none;
     }
     .pill b { color:#fff; }
+    .pill .lbl { opacity:.78; font-size:12px; letter-spacing:.01em; }
     .spacer { flex:1 1 auto; }
     .btn {
       pointer-events:auto;
@@ -86,30 +87,30 @@
   </div>
 
   <div class="hud">
-    <div class="pill"><span>⏱️</span> <b id="t">0.0s</b></div>
-    <div class="pill"><span>🪙</span> <b id="coins">0</b></div>
-    <div class="pill"><span>⚫</span> <b id="mass">1.0x</b></div>
-    <div class="pill"><span>✨</span> <b id="score">0</b></div>
-      <div class="pill"><span>🗿</span> <b id="relics">0/3</b></div>
-      <div class="pill"><span>🚪</span> <b id="extract">—</b></div>
-    <div class="pill"><span>❤️</span> <b id="hp">3</b></div>
-    <div class="pill"><span>🛡️</span> <b id="shield">0</b></div>
-    <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
-    <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
+    <div class="pill" title="Время текущего забега"><span>⏱️</span><span class="lbl">Время</span> <b id="t">0.0s</b></div>
+    <div class="pill" title="Монеты: рост шара, хвоста и прогресс забега"><span>🪙</span><span class="lbl">Монеты</span> <b id="coins">0</b></div>
+    <div class="pill" title="Текущий размер шара относительно старта"><span>⚫</span><span class="lbl">Размер</span> <b id="mass">1.0x</b></div>
+    <div class="pill" title="Очки: топ дня считает именно этот показатель"><span>✨</span><span class="lbl">Очки</span> <b id="score">0</b></div>
+      <div class="pill" title="Реликвии: собери 3, чтобы открыть экстракцию"><span>🗿</span><span class="lbl">Реликвии</span> <b id="relics">0/3</b></div>
+      <div class="pill" title="Экстракция: GO — портал открыт, DONE — успешно вышел"><span>🚪</span><span class="lbl">Выход</span> <b id="extract">—</b></div>
+    <div class="pill" title="Жизни"><span>❤️</span><span class="lbl">HP</span> <b id="hp">3</b></div>
+    <div class="pill" title="Щит: поглощает удар, пока есть заряд"><span>🛡️</span><span class="lbl">Щит</span> <b id="shield">0</b></div>
+    <div class="pill" title="Уровень сложности забега"><span>Lv</span><span class="lbl">Уровень</span> <b id="lv">1</b></div>
+    <div class="pill" title="Лучшее локальное время выживания"><span>🏆</span><span class="lbl">Лучшее</span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
 	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
 	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
     <div class="spacer"></div>
-    <button class="btn" id="pause">Пауза</button>
-    <button class="btn" id="restart">Заново</button>
+    <button class="btn" id="pause" title="Остановить или продолжить текущий забег">Пауза</button>
+    <button class="btn" id="restart" title="Сбросить текущий забег и начать снова">Заново</button>
   </div>
 
   
 <div class="hint">
-  <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
-  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+  <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок. Жри тех, кто заметно меньше, и не лезь в красный ободок опасности.</div>
+  <div class="card">🌑 Туман и мины опасны всем. 🪙 Монеты = рост, ✨ Очки = топ дня, 🗿 3 реликвии = портал, 🛡️ Щит = один спасённый удар.</div>
 </div>
 
 <div id="netMini" style="
@@ -231,10 +232,11 @@
 
 <div class="centerMsg" id="overlay">
   <div class="box">
-    <h2>Void Run — бесконечный мир</h2>
-    <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
-    <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
-    <p>Нажми <b>Старт</b>. Сетевой режим — по одному адресу с одинаковыми room и seed.</p>
+    <h2>Void Run — как играть</h2>
+    <p><b>Собирай монеты</b> — они растят шар, хвост и помогают набирать <b>очки ✨</b> для топа дня.</p>
+    <p><b>Жри меньших</b> игроков и ботов, избегай <b>мин</b>, вирусов и крупных врагов. Зелёный ободок = можно съесть, красный = опасно.</p>
+    <p><b>Собери 3 реликвии 🗿</b>, дождись открытия портала и выходи через <b>🚪 экстракцию</b>. <b>🛡️ Щит</b> спасает от одного удара.</p>
+    <p>Сетевой режим: открой один и тот же адрес с одинаковыми <b>room</b> и <b>seed</b>.</p>
     <div class="row">
       <button class="btn" id="start">Старт</button>
     </div>
