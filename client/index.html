@@ -537,6 +537,20 @@
   const netCountEl = document.getElementById('netCount');
   const netRoomLabelEl = document.getElementById('netRoomLabel');
   const netPlayersListEl = document.getElementById('netPlayersList');
+
+  function layoutFloatingPanels() {
+    const hudBarEl = document.getElementById('hudBar');
+    const netMiniEl = document.getElementById('netMini');
+    const onlinePanelDomEl = document.getElementById('onlinePanel');
+    if (!hudBarEl) return;
+
+    const rect = hudBarEl.getBoundingClientRect();
+    const topPx = Math.max(86, Math.ceil(rect.bottom + 16));
+
+    if (netMiniEl) netMiniEl.style.top = topPx + 'px';
+    if (onlinePanelDomEl) onlinePanelDomEl.style.top = topPx + 'px';
+  }
+
 const netRenameBtnEl = document.getElementById('netRenameBtn');
   const supportModalEl = document.getElementById('supportModal');
   const supportSubtitleEl = document.getElementById('supportSubtitle');
