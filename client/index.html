@@ -1470,22 +1470,22 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     window.addEventListener('touchend', up, { passive:false });
     window.addEventListener('touchcancel', up, { passive:false });
 
-    if (mobileDashBtnEl) mobileDashBtnEl.addEventListener('click', async () => {
+    bindTap(mobileDashBtnEl, async () => {
       await AudioFX.unlock();
       AudioFX.click();
       if (state === 'RUN' && dashReady) doDash();
     });
-    if (mobileEjectBtnEl) mobileEjectBtnEl.addEventListener('click', async () => {
+    bindTap(mobileEjectBtnEl, async () => {
       await AudioFX.unlock();
       AudioFX.click();
       if (state === 'RUN') ejectMass();
     });
-    if (mobileTopBtnEl) mobileTopBtnEl.addEventListener('click', async () => {
+    bindTap(mobileTopBtnEl, async () => {
       await AudioFX.unlock();
       AudioFX.click();
       toggleTopPanel();
     });
-    if (mobilePauseBtnEl) mobilePauseBtnEl.addEventListener('click', async () => {
+    bindTap(mobilePauseBtnEl, async () => {
       await AudioFX.unlock();
       AudioFX.click();
       if (state === 'RUN' || state === 'PAUSE') togglePause();
@@ -2171,6 +2171,22 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   });
 
 
+  function bindTap(el, handler){
+    if (!el || !handler) return;
+    let touchFired = false;
+    const wrapped = (e) => {
+      try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_) {}
+      handler(e);
+    };
+    el.addEventListener('click', (e) => {
+      if (touchFired) { touchFired = false; return; }
+      wrapped(e);
+    });
+    el.addEventListener('pointerup', (e) => { wrapped(e); }, { passive:false });
+    el.addEventListener('touchend', (e) => { touchFired = true; wrapped(e); }, { passive:false });
+  }
+
+
   function handleStartAction(e){
     if (e) {
       try { e.preventDefault(); } catch(_) {}
@@ -2187,35 +2203,34 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     resetGame();
   }
 
-  btnStart.addEventListener('click', handleStartAction);
-  btnStart.addEventListener('pointerup', handleStartAction, { passive:false });
-  btnStart.addEventListener('touchend', handleStartAction, { passive:false });
+  bindTap(btnStart, handleStartAction);
 
   AudioFX.autoUnlock();
 
-	document.getElementById("btnSound").onclick = async () => {
-	  await AudioFX.unlock();
-	  const on = AudioFX.toggleEnabled();
-	  document.getElementById("btnSound").textContent = on ? "🔊" : "🔈";
-	};
-	
-	document.getElementById("btnMusic").onclick = async () => {
-	  const on = await AudioFX.toggleMusic();
-	  document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
-	};
-	
-	function toggleTopPanel(){
+  bindTap(document.getElementById("btnSound"), async () => {
+    await AudioFX.unlock();
+    const on = AudioFX.toggleEnabled();
+    document.getElementById("btnSound").textContent = on ? "🔊" : "🔈";
+  });
+
+  bindTap(document.getElementById("btnMusic"), async () => {
+    const on = await AudioFX.toggleMusic();
+    document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
+  });
+
+  function toggleTopPanel(){
     if (!onlinePanelEl) return;
     const cur = onlinePanelEl.style.display;
     onlinePanelEl.style.display = (cur === 'none' || cur === '') ? 'block' : 'none';
   }
 
-  document.getElementById("btnTop").onclick = async () => {
-	  await AudioFX.unlock();
-	  AudioFX.click();
-	  toggleTopPanel();
-	};
-	
+  bindTap(document.getElementById("btnTop"), async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    toggleTopPanel();
+  });
+
+
   function updateHUD() {
     elT.textContent = timeSurv.toFixed(1) + 's';
     elCoins.textContent = player.coins;
