@@ -16,9 +16,12 @@
       position:fixed; left:16px; top:12px; right:16px;
       display:flex; gap:10px; flex-wrap:wrap; align-items:center;
       pointer-events:none;
+      z-index:10006;
     }
     .pill {
       pointer-events:auto;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color: transparent;
       background:rgba(20, 30, 60, .55);
       border:1px solid rgba(90, 140, 255, .25);
       color:#DDE8FF;
@@ -34,6 +37,8 @@
     .btn {
       pointer-events:auto;
       cursor:pointer;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color: transparent;
       background:linear-gradient(135deg, rgba(70,140,255,.95), rgba(120,70,255,.95));
       border:none; color:#fff;
       padding:10px 14px;
@@ -102,6 +107,7 @@
       backdrop-filter: blur(10px);
       user-select:none;
       touch-action:none;
+      z-index:10011;
     }
     #mobileJoyBase{
       position:absolute; inset:20px;
@@ -130,6 +136,7 @@
       grid-template-columns:repeat(2, 64px);
       gap:10px;
       pointer-events:auto;
+      z-index:10011;
     }
     .mBtn{
       width:64px; height:64px;
@@ -2228,6 +2235,47 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     await AudioFX.unlock();
     AudioFX.click();
     toggleTopPanel();
+  });
+
+
+  bindTap(btnPause, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    if (state === 'RUN' || state === 'PAUSE') togglePause();
+  });
+
+  bindTap(btnRestart, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    if (state === 'DEAD' && requestServerRespawn()) return;
+    overlay.style.display = 'none';
+    syncUiLayers();
+    state = 'RUN';
+    resetGame();
+  });
+
+  bindTap(btnFounder, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openSupport('founder');
+  });
+
+  bindTap(btnDonate, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openSupport('donate');
+  });
+
+  bindTap(onlineSaveBtn, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    if (onlineNameEl) onlineSetName(onlineNameEl.value);
+  });
+
+  bindTap(onlineRefreshBtn, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    await onlineRefresh();
   });
 
 
