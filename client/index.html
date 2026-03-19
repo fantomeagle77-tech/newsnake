@@ -1271,7 +1271,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function layoutFloatingPanels() {
     const vvTop = window.visualViewport ? window.visualViewport.offsetTop : 0;
-    const hudRect = hudBarEl ? hudBarEl.getBoundingClientRect() : { bottom: 56 };
+    const hudEl = document.getElementById('hudBar') || (typeof hudBarEl !== 'undefined' ? hudBarEl : null);
+    const hudRect = hudEl ? hudEl.getBoundingClientRect() : { bottom: 56 };
     const topPx = Math.ceil(hudRect.bottom + 10 + vvTop);
 
     if (netMiniEl) {
