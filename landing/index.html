@@ -5,10 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Void Run — Public Beta на newsnake.win</title>
   <meta name="description" content="Void Run — браузерная dark survival arena. Public Beta: собирай монеты, жри меньших, находи 3 реликвии и выходи через портал живым. Первый запуск может занять до минуты, пока сервер просыпается." />
+  <link rel="canonical" href="https://newsnake.win/" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
   <meta property="og:title" content="Void Run — тёмная онлайн survival arena" />
   <meta property="og:description" content="Расти, избегай опасностей, собирай 3 реликвии и выходи через портал живым." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://newsnake.win/" />
+  <meta property="og:site_name" content="Void Run" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:image" content="https://newsnake.win/og-voidrun.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Void Run — тёмная онлайн survival arena в браузере" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Void Run — тёмная онлайн survival arena" />
+  <meta name="twitter:description" content="Расти, избегай опасностей, собирай 3 реликвии и выходи через портал живым." />
+  <meta name="twitter:image" content="https://newsnake.win/og-voidrun.png" />
   <meta name="theme-color" content="#050816" />
   <style>
     :root{
@@ -75,6 +90,20 @@
     .notice{margin-top:18px;padding:14px 16px;border-radius:18px;border:1px solid rgba(255,211,106,.18);background:rgba(255,211,106,.06);color:#ffe9aa;line-height:1.55;font-weight:700}
     .notice small{display:block;color:#d7c999;font-weight:600;margin-top:6px}
     .beta{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(125,255,177,.08);border:1px solid rgba(125,255,177,.2);color:#cffff2;font-weight:800;margin-bottom:14px}
+
+    .mobile-cta{
+      position:fixed;left:12px;right:12px;bottom:max(12px, env(safe-area-inset-bottom));
+      z-index:30;display:none;gap:10px;padding:10px;border-radius:18px;
+      border:1px solid rgba(112,146,255,.2);background:rgba(6,10,24,.84);
+      backdrop-filter:blur(12px);box-shadow:0 18px 48px rgba(0,0,0,.35)
+    }
+    .mobile-cta a{flex:1;text-align:center}
+    @media (max-width: 760px){
+      body{padding-bottom:88px}
+      .mobile-cta{display:flex}
+      .btn{min-height:48px;display:inline-flex;align-items:center;justify-content:center}
+    }
+
     @media (max-width: 980px){
       .hero{grid-template-columns:1fr}
       .grid3{grid-template-columns:1fr}
@@ -91,6 +120,22 @@
       .lead{font-size:17px}
     }
   </style>
+
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"VideoGame",
+    "name":"Void Run",
+    "url":"https://newsnake.win/",
+    "playMode":"MultiPlayer",
+    "applicationCategory":"Game",
+    "genre":["Browser Game","Survival","PvP","Arcade"],
+    "description":"Тёмная онлайн survival arena в браузере: собирай монеты, жри меньших, находи 3 реликвии и выходи через портал живым.",
+    "publisher":{"@type":"Organization","name":"newsnake.win"},
+    "gamePlatform":"Web Browser",
+    "inLanguage":"ru"
+  }
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -184,7 +229,16 @@
         <h4>Что дают монеты и очки?</h4>
         <p>Монеты растят шар и хвост. Очки идут в топ дня и отражают ценность твоего ранa.</p>
       </div>
+      <div class="faq-item">
+        <h4>Можно играть с телефона?</h4>
+        <p>Да, это браузерная игра. Мобильная веб-версия уже в планах: после релизной упаковки добиваем интерфейс и тач-управление для мобильного браузера.</p>
+      </div>
     </section>
+
+    <div class="mobile-cta">
+      <a class="btn primary" href="https://play.newsnake.win">▶ Играть</a>
+      <a class="btn" href="https://play.newsnake.win?room=daily">Daily</a>
+    </div>
 
     <div class="footer">
       <div>Void Run / newsnake.win</div>
