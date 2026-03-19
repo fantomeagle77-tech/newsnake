@@ -60,7 +60,7 @@
     .centerMsg {
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
-      pointer-events:none;
+      pointer-events:auto;
       z-index:10012;
     }
     .centerMsg .box {
@@ -77,7 +77,7 @@
     .centerMsg .box h2 { margin:0 0 6px; font-size:18px; }
     .centerMsg .box p { margin:6px 0; line-height:1.35; color:rgba(235,245,255,.82); }
     .row { display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; }
-    .row .btn { pointer-events:auto; }
+    .row .btn { pointer-events:auto; touch-action:manipulation; }
     a { color:#9EC2FF; }
   
     html, body { touch-action:none; overscroll-behavior:none; }
@@ -1364,13 +1364,23 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const nickGate = document.getElementById('nickGate');
     const overlayEl = document.getElementById('overlay');
     const supportModal = document.getElementById('supportModal');
-    const activeModal = (nickGate && nickGate.style.display !== 'none')
-      || (overlayEl && overlayEl.style.display !== 'none')
-      || (supportModal && supportModal.style.display !== 'none');
+    const overlayOpen = !!(overlayEl && overlayEl.style.display !== 'none');
+    const nickGateOpen = !!(nickGate && nickGate.style.display !== 'none');
+    const supportOpen = !!(supportModal && supportModal.style.display !== 'none');
+    const activeModal = nickGateOpen || overlayOpen || supportOpen;
 
-    if (overlayEl) overlayEl.style.zIndex = '10030';
-    if (nickGate) nickGate.style.zIndex = '10040';
-    if (supportModal) supportModal.style.zIndex = '10035';
+    if (overlayEl) {
+      overlayEl.style.zIndex = '10030';
+      overlayEl.style.pointerEvents = overlayOpen ? 'auto' : 'none';
+    }
+    if (nickGate) {
+      nickGate.style.zIndex = '10040';
+      nickGate.style.pointerEvents = nickGateOpen ? 'auto' : 'none';
+    }
+    if (supportModal) {
+      supportModal.style.zIndex = '10035';
+      supportModal.style.pointerEvents = supportOpen ? 'auto' : 'none';
+    }
 
     if (mobileUi) {
       const isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
@@ -2161,7 +2171,11 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   });
 
 
-  btnStart.addEventListener('click', ()=>{
+  function handleStartAction(e){
+    if (e) {
+      try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
+    }
     if (state === 'PAUSE') {
       togglePause();
       return;
@@ -2171,7 +2185,11 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     syncUiLayers();
     state = 'RUN';
     resetGame();
-  });
+  }
+
+  btnStart.addEventListener('click', handleStartAction);
+  btnStart.addEventListener('pointerup', handleStartAction, { passive:false });
+  btnStart.addEventListener('touchend', handleStartAction, { passive:false });
 
   AudioFX.autoUnlock();
 
