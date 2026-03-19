@@ -61,6 +61,7 @@
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
       pointer-events:none;
+      z-index:10012;
     }
     .centerMsg .box {
       pointer-events:auto;
@@ -437,10 +438,26 @@
     let enabled = (localStorage.getItem(LS_SFX) ?? '1') === '1';
     let musicOn = (localStorage.getItem(LS_MUS) ?? '0') === '1'; // default OFF (важно)
     let sfxVol = parseFloat(localStorage.getItem(LS_SFXV) ?? '0.65');
-    let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.20');
+    let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.24');
 
     let musicTimer = null;
     let musicPhase = 0;
+    let ambientAudio = null;
+    let ambientTrackIndex = -1;
+    let ambientFadeTimer = null;
+
+    const AMBIENT_TRACKS = [
+      'audio/ambient_01.ogg',
+      'audio/ambient_02.ogg',
+      'audio/ambient_03.ogg',
+      'audio/ambient_04.ogg',
+	  'audio/ambient_05.ogg',
+      'audio/ambient_06.ogg',
+      'audio/ambient_07.ogg',
+      'audio/ambient_08.ogg',
+	  'audio/ambient_09.ogg',
+      'audio/ambient_10.ogg'
+    ];
 
     function ensure() {
       if (ctx) return;
@@ -459,7 +476,6 @@
       if (ctx.state !== 'running') {
         try { await ctx.resume(); } catch(e) {}
       }
-      // музыка НЕ стартует сама — только по кнопке
       return true;
     }
 
@@ -489,51 +505,98 @@
       musVol = Math.max(0, Math.min(1, v));
       localStorage.setItem(LS_MUSV, String(musVol));
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
+      if (ambientAudio) ambientAudio.volume = musicOn ? musVol : 0;
+    }
+
+    function clearAmbientFade() {
+      if (ambientFadeTimer) {
+        clearInterval(ambientFadeTimer);
+        ambientFadeTimer = null;
+      }
+    }
+
+    function chooseAmbientTrackIndex() {
+      const seed = (typeof dailySeedUTC === 'function' ? dailySeedUTC() : Date.now()) >>> 0;
+      return AMBIENT_TRACKS.length ? (seed % AMBIENT_TRACKS.length) : 0;
+    }
+
+    function ensureAmbientAudio() {
+      if (ambientAudio) return ambientAudio;
+
+      ambientAudio = new Audio();
+      ambientAudio.preload = 'auto';
+      ambientAudio.loop = true;
+      ambientAudio.volume = 0;
+      ambientAudio.crossOrigin = 'anonymous';
+
+      ambientAudio.addEventListener('error', () => {
+        if (!AMBIENT_TRACKS.length) return;
+        ambientTrackIndex = (ambientTrackIndex + 1) % AMBIENT_TRACKS.length;
+        ambientAudio.src = AMBIENT_TRACKS[ambientTrackIndex];
+        if (musicOn) {
+          ambientAudio.play().catch(() => {});
+        }
+      });
+
+      return ambientAudio;
+    }
+
+    function fadeAmbientTo(target, ms = 650, onDone = null) {
+      if (!ambientAudio) {
+        if (onDone) onDone();
+        return;
+      }
+
+      clearAmbientFade();
+      const start = ambientAudio.volume;
+      const delta = target - start;
+      const steps = Math.max(1, Math.round(ms / 40));
+      let i = 0;
+
+      ambientFadeTimer = setInterval(() => {
+        i++;
+        const t = i / steps;
+        ambientAudio.volume = Math.max(0, Math.min(1, start + delta * t));
+        if (i >= steps) {
+          clearAmbientFade();
+          ambientAudio.volume = Math.max(0, Math.min(1, target));
+          if (onDone) onDone();
+        }
+      }, 40);
     }
 
     function stopMusic() {
       if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+      clearAmbientFade();
+      if (ambientAudio) {
+        const a = ambientAudio;
+        fadeAmbientTo(0, 450, () => {
+          try { a.pause(); } catch (e) {}
+        });
+      }
     }
 
-    function startMusic() {
+    async function startMusic() {
       ensure();
       stopMusic();
-      // мягкий эмбиент: редкие "нотки", без пилы
-      const scale = [0, 3, 5, 7, 10]; // минор пентатоника
-      const base = 196; // G3
-      const playOne = () => {
-        if (!musicOn || !ctx) return;
-        const now = ctx.currentTime;
-        const note = scale[(musicPhase + Math.floor(Math.random()*2)) % scale.length];
-        const freq = base * Math.pow(2, note/12) * (Math.random() < 0.5 ? 1 : 2);
-        musicPhase = (musicPhase + 1) % scale.length;
 
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(freq, now);
+      if (!AMBIENT_TRACKS.length) return;
+      const a = ensureAmbientAudio();
+      const idx = chooseAmbientTrackIndex();
+      if (ambientTrackIndex !== idx || !a.src) {
+        ambientTrackIndex = idx;
+        a.src = AMBIENT_TRACKS[ambientTrackIndex];
+      }
 
-        // огибающая
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.exponentialRampToValueAtTime(0.16, now + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+      a.currentTime = 0;
+      a.volume = 0;
 
-        // лёгкий lowpass
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass';
-        f.frequency.setValueAtTime(700, now);
-
-        o.connect(f);
-        f.connect(g);
-        g.connect(musGain);
-
-        o.start(now);
-        o.stop(now + 0.60);
-
-        const next = 520 + Math.random()*600; // пауза между нотами
-        musicTimer = setTimeout(playOne, next);
-      };
-      playOne();
+      try {
+        await a.play();
+        fadeAmbientTo(musicOn ? musVol : 0, 900);
+      } catch (e) {
+        // ждём следующего явного клика по кнопке музыки
+      }
     }
 
     async function toggleMusic() {
@@ -541,7 +604,7 @@
       musicOn = !musicOn;
       localStorage.setItem(LS_MUS, musicOn ? '1' : '0');
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
-      if (musicOn) startMusic(); else stopMusic();
+      if (musicOn) await startMusic(); else stopMusic();
       return musicOn;
     }
 
