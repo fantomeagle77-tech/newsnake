@@ -458,7 +458,13 @@
       'audio/ambient_01.ogg',
       'audio/ambient_02.ogg',
       'audio/ambient_03.ogg',
-      'audio/ambient_04.ogg'
+      'audio/ambient_04.ogg',
+	  'audio/ambient_05.ogg',
+      'audio/ambient_06.ogg',
+      'audio/ambient_07.ogg',
+      'audio/ambient_08.ogg',
+	  'audio/ambient_09.ogg',
+      'audio/ambient_10.ogg'
     ];
 
     function ensure() {
@@ -1414,24 +1420,37 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (MOBILE.enabled) mobileSetAim(0, 0);
   }
 
-  function mobileUpdateJoyFromClient(clientX, clientY) {
-    if (!mobileJoyWrapEl) return;
+  function mobileJoyMetrics() {
+    if (!mobileJoyWrapEl) return null;
     const rect = mobileJoyWrapEl.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    let dx = clientX - cx;
-    let dy = clientY - cy;
+    const activeR = Math.min(rect.width, rect.height) * 0.48;
     const limit = Math.min(rect.width, rect.height) * 0.34;
+    return { rect, cx, cy, activeR, limit };
+  }
+
+  function mobileJoyContains(clientX, clientY, extra = 0) {
+    const m = mobileJoyMetrics();
+    if (!m) return false;
+    return Math.hypot(clientX - m.cx, clientY - m.cy) <= (m.activeR + extra);
+  }
+
+  function mobileUpdateJoyFromClient(clientX, clientY) {
+    const m = mobileJoyMetrics();
+    if (!m) return;
+    let dx = clientX - m.cx;
+    let dy = clientY - m.cy;
     const d = Math.hypot(dx, dy) || 1;
-    if (d > limit) {
-      dx = dx / d * limit;
-      dy = dy / d * limit;
+    if (d > m.limit) {
+      dx = dx / d * m.limit;
+      dy = dy / d * m.limit;
     }
     MOBILE.joyX = dx;
     MOBILE.joyY = dy;
     if (mobileJoyKnobEl) mobileJoyKnobEl.style.transform = `translate(${dx}px, ${dy}px)`;
-    const nx = limit > 0 ? dx / limit : 0;
-    const ny = limit > 0 ? dy / limit : 0;
+    const nx = m.limit > 0 ? dx / m.limit : 0;
+    const ny = m.limit > 0 ? dy / m.limit : 0;
     mobileSetAim(nx, ny);
   }
 
@@ -1441,10 +1460,15 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const down = (e) => {
       if (!MOBILE.enabled) return;
       const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      if (!pt || !mobileJoyContains(pt.clientX, pt.clientY, 0)) return;
       MOBILE.joyActive = true;
       MOBILE.joyPointerId = ('identifier' in pt) ? pt.identifier : ('pointerId' in e ? e.pointerId : 1);
       mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
+      try {
+        if ('pointerId' in e && mobileJoyWrapEl.setPointerCapture) mobileJoyWrapEl.setPointerCapture(e.pointerId);
+      } catch(_) {}
       try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
     };
     const move = (e) => {
       if (!MOBILE.enabled || !MOBILE.joyActive) return;
@@ -1459,24 +1483,42 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         pt = e;
       }
       if (!pt) return;
+      if (!mobileJoyContains(pt.clientX, pt.clientY, 2)) {
+        mobileResetJoy();
+        return;
+      }
       mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
       try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
     };
     const up = (e) => {
-      if (!MOBILE.enabled) return;
+      if (!MOBILE.enabled || !MOBILE.joyActive) return;
+      if (e.changedTouches) {
+        let matched = false;
+        for (const t of e.changedTouches) {
+          if (t.identifier === MOBILE.joyPointerId) { matched = true; break; }
+        }
+        if (!matched) return;
+      } else if ('pointerId' in e && e.pointerId !== MOBILE.joyPointerId) {
+        return;
+      }
+      try {
+        if ('pointerId' in e && mobileJoyWrapEl.releasePointerCapture) mobileJoyWrapEl.releasePointerCapture(e.pointerId);
+      } catch(_) {}
       mobileResetJoy();
       try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
     };
 
     mobileJoyWrapEl.addEventListener('pointerdown', down, { passive:false });
-    window.addEventListener('pointermove', move, { passive:false });
-    window.addEventListener('pointerup', up, { passive:false });
-    window.addEventListener('pointercancel', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('pointermove', move, { passive:false });
+    mobileJoyWrapEl.addEventListener('pointerup', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('pointercancel', up, { passive:false });
 
     mobileJoyWrapEl.addEventListener('touchstart', down, { passive:false });
-    window.addEventListener('touchmove', move, { passive:false });
-    window.addEventListener('touchend', up, { passive:false });
-    window.addEventListener('touchcancel', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('touchmove', move, { passive:false });
+    mobileJoyWrapEl.addEventListener('touchend', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('touchcancel', up, { passive:false });
 
     bindTap(mobileDashBtnEl, async () => {
       await AudioFX.unlock();
