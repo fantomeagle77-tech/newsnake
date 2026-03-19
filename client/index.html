@@ -450,13 +450,7 @@
       'audio/ambient_01.ogg',
       'audio/ambient_02.ogg',
       'audio/ambient_03.ogg',
-      'audio/ambient_04.ogg',
-	  'audio/ambient_05.ogg',
-      'audio/ambient_06.ogg',
-      'audio/ambient_07.ogg',
-      'audio/ambient_08.ogg',
-	  'audio/ambient_09.ogg',
-      'audio/ambient_10.ogg'
+      'audio/ambient_04.ogg'
     ];
 
     function ensure() {
@@ -670,6 +664,7 @@
   const maskCanvas = document.createElement('canvas');
   const maskCtx = maskCanvas.getContext('2d');
   let W = 0, H = 0, DPR = 1;
+  let UI_REFS_READY = false;
 
   function resize() {
     DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -677,7 +672,7 @@
     H = Math.floor(window.innerHeight * DPR);
     canvas.width = W; canvas.height = H;
     maskCanvas.width = W; maskCanvas.height = H;
-    if (typeof layoutFloatingPanels === 'function') layoutFloatingPanels();
+    if (UI_REFS_READY && typeof layoutFloatingPanels === 'function') layoutFloatingPanels();
   }
   window.addEventListener('resize', resize);
   resize();
@@ -735,6 +730,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
+
+  UI_REFS_READY = true;
 
   // Best time (local)
   const BEST_KEY = 'voidrun_best_time';
@@ -885,14 +882,17 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (force || !ONLINE.name) {
       nickGateEl.style.display = 'flex';
       syncNickInputs();
+      syncUiLayers();
       setTimeout(() => { if (nickGateInputEl) nickGateInputEl.focus(); }, 30);
     } else {
       nickGateEl.style.display = 'none';
+      syncUiLayers();
     }
   }
 
   function closeNickGate() {
     if (nickGateEl) nickGateEl.style.display = 'none';
+    syncUiLayers();
   }
 
   function applyNickFromGate() {
@@ -1029,6 +1029,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
               if (p.alive === false && state === 'RUN') {
                 state = 'DEAD';
                 overlay.style.display = 'flex';
+    syncUiLayers();
                 overlay.querySelector('h2').textContent = 'Тебя схавали ☠️';
                 overlay.querySelectorAll('p')[0].innerHTML = `Счёт: <b>${player.score|0}</b> • Монеты: <b>${player.coins}</b>`;
                 overlay.querySelectorAll('p')[1].innerHTML = `Нажми <b>Старт</b>, чтобы быстро респавниться в новой точке.`;
@@ -1056,6 +1057,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         NET.spawn = msg.spawn || NET.spawn || { x: 0, y: 0 };
         NET.awaitingRespawn = false;
         overlay.style.display = 'none';
+      syncUiLayers();
         state = 'RUN';
         resetGame();
         return;
@@ -1065,6 +1067,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         if (msg.role === 'victim') {
           state = 'DEAD';
           overlay.style.display = 'flex';
+    syncUiLayers();
           overlay.querySelector('h2').textContent = 'Тебя схавали ☠️';
           overlay.querySelectorAll('p')[0].innerHTML = `Тебя съел: <b>${String(msg.killerName || 'игрок').slice(0,18)}</b>`;
           overlay.querySelectorAll('p')[1].innerHTML = `Нажми <b>Старт</b>, чтобы сразу респавниться в новой точке.`;
@@ -1356,6 +1359,27 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     }
   }
 
+  function syncUiLayers() {
+    const mobileUi = document.getElementById('mobileUi');
+    const nickGate = document.getElementById('nickGate');
+    const overlayEl = document.getElementById('overlay');
+    const supportModal = document.getElementById('supportModal');
+    const activeModal = (nickGate && nickGate.style.display !== 'none')
+      || (overlayEl && overlayEl.style.display !== 'none')
+      || (supportModal && supportModal.style.display !== 'none');
+
+    if (overlayEl) overlayEl.style.zIndex = '10030';
+    if (nickGate) nickGate.style.zIndex = '10040';
+    if (supportModal) supportModal.style.zIndex = '10035';
+
+    if (mobileUi) {
+      const isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
+      mobileUi.style.display = (isMobile && !activeModal) ? 'block' : 'none';
+      mobileUi.style.pointerEvents = activeModal ? 'none' : '';
+      mobileUi.setAttribute('aria-hidden', activeModal ? 'true' : 'false');
+    }
+  }
+
   function mobileSetAim(nx, ny) {
     const dd = MOBILE.aimDist * DPR;
     mouseX = W/2 + nx * dd;
@@ -1460,6 +1484,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const onResizeMobile = () => {
       MOBILE.enabled = isMobileMode();
       document.body.classList.toggle('mobile-ui', MOBILE.enabled);
+      syncUiLayers();
       document.body.classList.toggle('portrait-ui', MOBILE.enabled && window.innerHeight > window.innerWidth);
       if (MOBILE.enabled) {
         MOBILE.aimDist = window.innerWidth > window.innerHeight ? 240 : 190;
@@ -1520,6 +1545,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
     if (NET_ENABLED) openNickGate(true);
     layoutFloatingPanels();
+    syncUiLayers();
   }
 
   function onlineRenderTop() {
@@ -1991,6 +2017,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     resetTransientFX();
     state = 'MENU';
     overlay.style.display = 'flex';
+    syncUiLayers();
     overlay.querySelector('h2').textContent = 'Респавн...';
     overlay.querySelectorAll('p')[0].innerHTML = 'Ищем новую точку спавна на сервере.';
     overlay.querySelectorAll('p')[1].innerHTML = 'После смерти от босса больше не должно прилипать к старому месту.';
@@ -2051,6 +2078,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
   function showPauseOverlay() {
     overlay.style.display = 'flex';
+    syncUiLayers();
     overlay.querySelector('h2').textContent = 'Пауза ⏸️';
     const ps = overlay.querySelectorAll('p');
     ps[0].innerHTML = `Время: <b>${timeSurv.toFixed(1)}s</b> • Монеты: <b>${player.coins}</b> • Уровень: <b>${level}</b>`;
@@ -2066,6 +2094,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     } else if (state === 'PAUSE') {
       state = 'RUN';
       overlay.style.display = 'none';
+      syncUiLayers();
     }
 	AudioFX.click();
   }
@@ -2117,11 +2146,13 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     onlineGhostReset();
     updateHUD();
     if (typeof layoutFloatingPanels === 'function') layoutFloatingPanels();
+    syncUiLayers();
   }
 
   btnRestart.addEventListener('click', ()=>{
     if (state === 'DEAD' && requestServerRespawn()) return;
     overlay.style.display = 'none';
+    syncUiLayers();
     state = 'RUN';
     resetGame();
   });
@@ -2137,6 +2168,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     }
     if (state === 'DEAD' && requestServerRespawn()) return;
     overlay.style.display = 'none';
+    syncUiLayers();
     state = 'RUN';
     resetGame();
   });
@@ -3091,6 +3123,7 @@ if (ch.hunters) {
       if (NET_ENABLED && NET.suppressNextOverlay) {
         NET.suppressNextOverlay = false;
         overlay.style.display = 'none';
+      syncUiLayers();
         state = 'RUN';
         return;
       }
@@ -3105,6 +3138,7 @@ if (ch.hunters) {
         elBest.textContent = timeSurv.toFixed(1) + 's';
       }
       overlay.style.display = 'flex';
+    syncUiLayers();
       overlay.querySelector('h2').textContent = 'Поражение 😵';
       overlay.querySelectorAll('p')[0].innerHTML = `Время: <b>${timeSurv.toFixed(1)}s</b> • Монеты: <b>${player.coins}</b> • Уровень: <b>${level}</b>`;
       overlay.querySelectorAll('p')[1].innerHTML = `Совет: кормись на мелких, избегай крупных. В темноте встречаются "хищники" и "вирусы". SPACE — рывок.`;
@@ -3729,6 +3763,7 @@ function drawCoin(x,y,r) {
       player.extracted = true;
       state = 'DEAD';
       overlay.style.display = 'flex';
+    syncUiLayers();
       overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
       overlay.querySelectorAll('p')[0].innerHTML = `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
       overlay.querySelectorAll('p')[1].innerHTML = `Успешный выход из экспедиции. Результат отправлен в таблицу лидеров.`;
