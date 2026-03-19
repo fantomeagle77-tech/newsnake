@@ -133,13 +133,13 @@
       right:max(12px, env(safe-area-inset-right));
       bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);
       display:grid;
-      grid-template-columns:repeat(2, 64px);
-      gap:10px;
+      grid-template-columns:repeat(2, 72px);
+      gap:12px;
       pointer-events:auto;
       z-index:10011;
     }
     .mBtn{
-      width:64px; height:64px;
+      width:72px; height:72px;
       border-radius:22px;
       border:none;
       color:#fff;
@@ -186,9 +186,10 @@
     body.mobile-ui .pill{ border-radius:16px; }
     body.mobile-ui .btn{ border-radius:18px; }
     body.mobile-ui .hint{
+      display:none !important;
       left:max(8px, env(safe-area-inset-left));
       right:max(8px, env(safe-area-inset-right));
-      bottom:calc(env(safe-area-inset-bottom, 0px) + 108px);
+      bottom:calc(env(safe-area-inset-bottom, 0px) + 12px);
       gap:6px;
     }
     body.mobile-ui .hint .card{
@@ -2180,17 +2181,17 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 
   function bindTap(el, handler){
     if (!el || !handler) return;
-    let touchFired = false;
-    const wrapped = (e) => {
+    let lastFire = 0;
+    const fire = (e) => {
+      const now = Date.now();
+      if (now - lastFire < 260) return;
+      lastFire = now;
       try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_) {}
       handler(e);
     };
-    el.addEventListener('click', (e) => {
-      if (touchFired) { touchFired = false; return; }
-      wrapped(e);
-    });
-    el.addEventListener('pointerup', (e) => { wrapped(e); }, { passive:false });
-    el.addEventListener('touchend', (e) => { touchFired = true; wrapped(e); }, { passive:false });
+    el.addEventListener('touchstart', fire, { passive:false });
+    el.addEventListener('pointerdown', fire, { passive:false });
+    el.addEventListener('click', fire, { passive:false });
   }
 
 
