@@ -1271,21 +1271,24 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function layoutFloatingPanels() {
     const vvTop = window.visualViewport ? window.visualViewport.offsetTop : 0;
-    const hudEl = document.getElementById('hudBar') || (typeof hudBarEl !== 'undefined' ? hudBarEl : null);
+    const hudEl = document.getElementById('hudBar');
+    const netMini = document.getElementById('netMini');
+    const onlinePanel = document.getElementById('onlinePanel');
+    const isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
     const hudRect = hudEl ? hudEl.getBoundingClientRect() : { bottom: 56 };
     const topPx = Math.ceil(hudRect.bottom + 10 + vvTop);
 
-    if (netMiniEl) {
-      netMiniEl.style.top = `${topPx}px`;
+    if (netMini) {
+      netMini.style.top = `${topPx}px`;
     }
 
-    if (onlinePanelEl) {
-      if (MOBILE.enabled) {
-        onlinePanelEl.style.top = 'auto';
-        onlinePanelEl.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 112px)';
+    if (onlinePanel) {
+      if (isMobile) {
+        onlinePanel.style.top = 'auto';
+        onlinePanel.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 112px)';
       } else {
-        onlinePanelEl.style.bottom = 'auto';
-        onlinePanelEl.style.top = `${topPx}px`;
+        onlinePanel.style.bottom = 'auto';
+        onlinePanel.style.top = `${topPx}px`;
       }
     }
   }
