@@ -1,15 +1,6 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-JNK6W07XF3"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', 'G-FH034YW546');
-  </script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no" />
   <title>Void Run — online survival arena</title>
@@ -1466,68 +1457,110 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   function initMobileControls() {
     if (!mobileJoyWrapEl) return;
 
+    function findTouchById(list, id) {
+      if (!list) return null;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].identifier === id) return list[i];
+      }
+      return null;
+    }
+
+    function eventPoint(e, changedToo = false) {
+      if (!e) return null;
+      if (e.touches && e.touches.length) return e.touches[0];
+      if (changedToo && e.changedTouches && e.changedTouches.length) return e.changedTouches[0];
+      return e;
+    }
+
     const down = (e) => {
       if (!MOBILE.enabled) return;
-      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-      if (!pt || !mobileJoyContains(pt.clientX, pt.clientY, 0)) return;
+      const pt = eventPoint(e, false);
+      if (!pt) return;
+
+      // start ONLY inside joystick circle
+      if (!mobileJoyContains(pt.clientX, pt.clientY, 0)) return;
+
       MOBILE.joyActive = true;
-      MOBILE.joyPointerId = ('identifier' in pt) ? pt.identifier : ('pointerId' in e ? e.pointerId : 1);
+      MOBILE.joyPointerId = ('identifier' in pt)
+        ? pt.identifier
+        : (('pointerId' in e) ? e.pointerId : 1);
+
       mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
+
       try {
-        if ('pointerId' in e && mobileJoyWrapEl.setPointerCapture) mobileJoyWrapEl.setPointerCapture(e.pointerId);
+        if ('pointerId' in e && mobileJoyWrapEl.setPointerCapture) {
+          mobileJoyWrapEl.setPointerCapture(e.pointerId);
+        }
       } catch(_) {}
-      try { e.preventDefault(); } catch(_) {}
+
+      if (e.cancelable) {
+        try { e.preventDefault(); } catch(_) {}
+      }
       try { e.stopPropagation(); } catch(_) {}
     };
+
     const move = (e) => {
       if (!MOBILE.enabled || !MOBILE.joyActive) return;
+
       let pt = null;
-      if (e.touches) {
-        for (const t of e.touches) {
-          if (t.identifier === MOBILE.joyPointerId) { pt = t; break; }
-        }
+      if (e.touches || e.changedTouches) {
+        pt = findTouchById(e.touches, MOBILE.joyPointerId) || findTouchById(e.changedTouches, MOBILE.joyPointerId);
       } else if ('pointerId' in e) {
-        if (e.pointerId === MOBILE.joyPointerId) pt = e;
+        if (e.pointerId !== MOBILE.joyPointerId) return;
+        pt = e;
       } else {
         pt = e;
       }
       if (!pt) return;
-      if (!mobileJoyContains(pt.clientX, pt.clientY, 2)) {
-        mobileResetJoy();
-        return;
-      }
+
+      // KEEP direction even when finger leaves the circle:
+      // just clamp knob to joystick radius, do not reset here.
       mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
-      try { e.preventDefault(); } catch(_) {}
-      try { e.stopPropagation(); } catch(_) {}
+
+      if (e.cancelable) {
+        try { e.preventDefault(); } catch(_) {}
+      }
     };
+
     const up = (e) => {
       if (!MOBILE.enabled || !MOBILE.joyActive) return;
+
+      let matched = false;
       if (e.changedTouches) {
-        let matched = false;
-        for (const t of e.changedTouches) {
-          if (t.identifier === MOBILE.joyPointerId) { matched = true; break; }
-        }
-        if (!matched) return;
-      } else if ('pointerId' in e && e.pointerId !== MOBILE.joyPointerId) {
-        return;
+        matched = !!findTouchById(e.changedTouches, MOBILE.joyPointerId);
+      } else if ('pointerId' in e) {
+        matched = (e.pointerId === MOBILE.joyPointerId);
+      } else {
+        matched = true;
       }
+      if (!matched) return;
+
       try {
-        if ('pointerId' in e && mobileJoyWrapEl.releasePointerCapture) mobileJoyWrapEl.releasePointerCapture(e.pointerId);
+        if ('pointerId' in e && mobileJoyWrapEl.releasePointerCapture) {
+          mobileJoyWrapEl.releasePointerCapture(e.pointerId);
+        }
       } catch(_) {}
+
       mobileResetJoy();
-      try { e.preventDefault(); } catch(_) {}
-      try { e.stopPropagation(); } catch(_) {}
+
+      if (e.cancelable) {
+        try { e.preventDefault(); } catch(_) {}
+      }
     };
 
+    // Start only from the joystick element
     mobileJoyWrapEl.addEventListener('pointerdown', down, { passive:false });
-    mobileJoyWrapEl.addEventListener('pointermove', move, { passive:false });
-    mobileJoyWrapEl.addEventListener('pointerup', up, { passive:false });
-    mobileJoyWrapEl.addEventListener('pointercancel', up, { passive:false });
-
     mobileJoyWrapEl.addEventListener('touchstart', down, { passive:false });
-    mobileJoyWrapEl.addEventListener('touchmove', move, { passive:false });
-    mobileJoyWrapEl.addEventListener('touchend', up, { passive:false });
-    mobileJoyWrapEl.addEventListener('touchcancel', up, { passive:false });
+
+    // After start, track ONLY the active pointer/touch globally.
+    // This keeps direction stable without turning the whole screen into a joystick.
+    document.addEventListener('pointermove', move, { passive:false });
+    document.addEventListener('pointerup', up, { passive:false });
+    document.addEventListener('pointercancel', up, { passive:false });
+
+    document.addEventListener('touchmove', move, { passive:false });
+    document.addEventListener('touchend', up, { passive:false });
+    document.addEventListener('touchcancel', up, { passive:false });
 
     bindTap(mobileDashBtnEl, async () => {
       await AudioFX.unlock();
@@ -1759,14 +1792,19 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }, {passive:true});
 
   // Touch support (optional)
+  // IMPORTANT:
+  // On mobile, aiming must be controlled ONLY by the on-screen joystick.
+  // So whole-screen touch aiming is disabled when MOBILE.enabled = true.
   window.addEventListener('touchstart', (e)=>{
     if (!e.touches.length) return;
+    if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
     hasPointer = true;
     mouseX = e.touches[0].clientX * DPR;
     mouseY = e.touches[0].clientY * DPR;
   }, {passive:true});
   window.addEventListener('touchmove', (e)=>{
     if (!e.touches.length) return;
+    if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
     hasPointer = true;
     mouseX = e.touches[0].clientX * DPR;
     mouseY = e.touches[0].clientY * DPR;
