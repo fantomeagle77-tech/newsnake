@@ -3,11 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>Void Run — online survival arena</title>
-  <meta name="description" content="Void Run — тёмная онлайн survival arena с ростом шара, минами, реликвиями и экстракцией." />
+  <title>БЕГ В ТЕМНОТЕ - Онлайн игра на выживание</title>
+  <meta name="description" content="БЕГ В ТЕМНОТЕ — онлайн игра арена в темноте на выживание с ростом шара, минами, реликвиями и эвакуацией." />
   <meta name="robots" content="index,follow" />
   <meta property="og:title" content="Void Run — online survival arena" />
   <meta property="og:description" content="Grow, hunt, survive, extract." />
+  <meta property="og:title" content="Онлайн игра, выживание, бесплатные онлайн игры, игры онлайн играть регистрации" />
+  <meta property="og:description" content="игры онлайн играть бесплатно, бесплатные онлайн игры, игры онлайн играть регистрации, игры без регистрации, гонки, игры на выживание, браузерные игры онлайн, игры, онлайн игры." />
   <style>
     html, body { margin:0; padding:0; height:100%; background:#070A12; overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #wrap { position:fixed; inset:0; display:block; }
@@ -339,10 +341,14 @@
     Призрак дня: загрузка…
   </div>
 
-  <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+  <div id="onlineMyBest" style="margin-top:8px; font-size:12px; opacity:.86;">
+    Личный рекорд: загрузка…
+  </div>
+
+  <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:260px; overflow:auto;"></ol>
 
   <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Лучшие результаты с никами сохраняются на сервере и доступны после перезагрузки.
+    Лучшие результаты по никам хранятся в D1 и доступны после перезагрузки.
   </div>
 </div>
 
@@ -1614,6 +1620,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     }
     if (onlinePanelEl) onlinePanelEl.style.display = 'none';
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
+    if (onlineMyBestEl) onlineMyBestEl.textContent = 'Личный рекорд: загрузка…';
 
     syncNickInputs();
     netRenderMiniList();
@@ -1681,7 +1688,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
-
     for (const row of ONLINE.top) {
       const li = document.createElement('li');
       li.style.margin = '0 0 10px 0';
@@ -1689,7 +1695,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       li.innerHTML = `<b>${row.name || 'anon'}</b><br><span style="opacity:.78">${formatRunLine(row)}</span>`;
       onlineTopEl.appendChild(li);
     }
-
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -1700,33 +1705,20 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function onlineRenderGhostLabel() {
     if (!onlineGhostEl) return;
-    if (!ONLINE.ghost) {
-      onlineGhostEl.textContent = 'Призрак дня: нет данных';
-      return;
-    }
+    if (!ONLINE.ghost) { onlineGhostEl.textContent = 'Призрак дня: нет данных'; return; }
     onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} • очки ${Number(ONLINE.ghost.score||0)} • время ${((Number(ONLINE.ghost.time_ms||0))/1000).toFixed(1)}s`;
   }
 
   async function onlineRefresh() {
-    let topLoaded = false;
-
     try {
       const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`);
-      if (!topRes.ok) throw new Error('top failed');
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
-      topLoaded = true;
     } catch (e) {}
-
-    if (!topLoaded) {
-      ONLINE.top = localLoadTop();
-      onlineRenderTop();
-    }
 
     try {
       const meRes = await fetch(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`);
-      if (!meRes.ok) throw new Error('mebest failed');
       const meJson = await meRes.json();
       applyPersonalBest(meJson.row || meJson.best || null);
     } catch (e) {
@@ -1735,7 +1727,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
     try {
       const gRes = await fetch(`/api/ghost?seed=${SEED}&mode=${MODE}`);
-      if (!gRes.ok) throw new Error('ghost failed');
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -1745,20 +1736,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         const parsed = JSON.parse(ONLINE.ghost.ghost);
         if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
       }
-
       onlineRenderGhostLabel();
     } catch (e) {
-      ONLINE.ghost = ONLINE.top.length ? ONLINE.top[0] : null;
+      ONLINE.ghost = null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
-
-      if (ONLINE.ghost && ONLINE.ghost.ghost) {
-        try {
-          const parsed = JSON.parse(ONLINE.ghost.ghost);
-          if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
-        } catch (_) {}
-      }
-
       onlineRenderGhostLabel();
     }
 
@@ -1814,7 +1796,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   async function onlineSubmitResult(forceSubmit=false) {
     try {
-      if (MODE === 'expedition' && !forceSubmit && !player.extracted) return;
       const payload = {
         name: ONLINE.name || 'anon',
         seed: SEED,
@@ -1832,6 +1813,26 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
       });
+
+      const curBest = bestRowLocal;
+      const better =
+        !curBest ||
+        (Number(payload.score || 0) > Number(curBest.score || 0)) ||
+        (
+          Number(payload.score || 0) === Number(curBest.score || 0) &&
+          Number(payload.time_ms || 0) > Number(curBest.time_ms || 0)
+        ) ||
+        (
+          Number(payload.score || 0) === Number(curBest.score || 0) &&
+          Number(payload.time_ms || 0) === Number(curBest.time_ms || 0) &&
+          Number(payload.coins || 0) > Number(curBest.coins || 0)
+        );
+
+      if (better) {
+        bestRowLocal = { ...payload };
+        applyPersonalBest(bestRowLocal);
+      }
+
       await onlineRefresh();
     } catch (e) {}
   }
