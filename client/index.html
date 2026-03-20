@@ -1807,23 +1807,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       onlineRenderTop();
     } catch (e) {}
 
-    if (!ONLINE.mebestDisabled) {
-      try {
-        const meRes = await fetch(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`);
-        if (meRes.status === 404) {
-          ONLINE.mebestDisabled = true;
-          const topSelf = (ONLINE.top || []).find(r => String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase());
-          applyPersonalBest(topSelf || bestRowLocal);
-        } else {
-          const meJson = await meRes.json();
-          applyPersonalBest(meJson.row || meJson.best || null);
-        }
-      } catch (e) {
-        const topSelf = (ONLINE.top || []).find(r => String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase());
-        applyPersonalBest(topSelf || bestRowLocal);
-      }
-    } else {
-      const topSelf = (ONLINE.top || []).find(r => String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase());
+    {
+      const topSelf = (ONLINE.top || []).find(r =>
+        String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase()
+      );
       applyPersonalBest(topSelf || bestRowLocal);
     }
 
@@ -1952,39 +1939,33 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function resetPointerToCenter() {
     hasPointer = false;
-    mouseX = (W / 2);
-    mouseY = (H / 2);
+    mouseX = W/2;
+    mouseY = H/2;
   }
 
-  function updatePointerFromClient(clientX, clientY) {
+  function pointerInsideGame(clientX, clientY) {
+    if (!canvas) return false;
     const rect = canvas.getBoundingClientRect();
-    const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
-    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) {
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  // IMPORTANT: use the old working scheme from RELEASE_6_WORK:
+  // screen-space cursor around the screen center, but only while the cursor is inside the game field.
+  window.addEventListener('mousemove', (e)=>{
+    if (MOBILE.enabled) return;
+    if (!pointerInsideGame(e.clientX, e.clientY)) {
       resetPointerToCenter();
       return;
     }
     hasPointer = true;
-    mouseX = localX * DPR;
-    mouseY = localY * DPR;
-  }
+    mouseX = e.clientX * DPR;
+    mouseY = e.clientY * DPR;
+  }, {passive:true});
 
-  if (canvas) {
-    canvas.addEventListener('mousemove', (e)=>{
-      if (MOBILE.enabled) return;
-      updatePointerFromClient(e.clientX, e.clientY);
-    }, {passive:true});
-
-    canvas.addEventListener('mouseenter', (e)=>{
-      if (MOBILE.enabled) return;
-      updatePointerFromClient(e.clientX, e.clientY);
-    }, {passive:true});
-
-    canvas.addEventListener('mouseleave', ()=>{
-      if (MOBILE.enabled) return;
-      resetPointerToCenter();
-    }, {passive:true});
-  }
+  window.addEventListener('mouseleave', ()=>{
+    if (MOBILE.enabled) return;
+    resetPointerToCenter();
+  }, {passive:true});
 
   window.addEventListener('blur', ()=>{
     if (!MOBILE.enabled) resetPointerToCenter();
@@ -2888,14 +2869,16 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
   }
 
   function pointerWorldTarget() {
-    const { px, py } = playerScreenPos();
+    // Old working RELEASE_6 scheme:
+    // cursor relative to screen center -> world target around camera/player.
     return {
-      tx: cam.x + (mouseX - px),
-      ty: cam.y + (mouseY - py),
+      tx: cam.x + (mouseX - W/2),
+      ty: cam.y + (mouseY - H/2),
     };
   }
 
   function applyTail() {
+
     // Add current position to tail points
     const last = tail.points[tail.points.length - 1];
     if (!last || dist2(last.x,last.y, player.x, player.y) > tail.spacing*tail.spacing) {
