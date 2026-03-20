@@ -44,13 +44,15 @@ function leaderboardKey(seed, mode) {
   return `${seed || 0}::${mode || 'score'}`;
 }
 
+function compareRows(a, b) {
+  if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
+  if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
+  if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
+  return (b.time_ms | 0) - (a.time_ms | 0);
+}
+
 function sortRows(rows) {
-  rows.sort((a, b) => {
-    if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
-    if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
-    if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
-    return (b.time_ms | 0) - (a.time_ms | 0);
-  });
+  rows.sort(compareRows);
   return rows;
 }
 
@@ -71,15 +73,27 @@ function submitRow(raw) {
 
   const key = leaderboardKey(row.seed, row.mode);
   const rows = leaderboards.get(key) || [];
-  rows.push(row);
+
+  // Keep the best server-side result per player name for this seed/mode.
+  const existingIdx = rows.findIndex(r => String(r.name).toLowerCase() === String(row.name).toLowerCase());
+  if (existingIdx >= 0) {
+    const existing = rows[existingIdx];
+    if (compareRows(row, existing) < 0) {
+      return existing;
+    }
+    rows.splice(existingIdx, 1, row);
+  } else {
+    rows.push(row);
+  }
+
   sortRows(rows);
-  leaderboards.set(key, rows.slice(0, 100));
+  leaderboards.set(key, rows.slice(0, 200));
   return row;
 }
 
-function getTop(seed, mode, limit = 10) {
+function getTop(seed, mode, limit = 20) {
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
-  return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
+  return rows.slice(0, clamp(Number(limit) || 20, 1, 50));
 }
 
 function getGhost(seed, mode) {
