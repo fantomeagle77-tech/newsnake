@@ -140,7 +140,7 @@ function getRoom(name) {
   name = String(name || 'daily').trim().slice(0, 24) || 'daily';
   let room = rooms.get(name);
   if (!room) {
-    room = { name, players: new Map() };
+    room = { name, players: new Map(), revealUntil: 0, consumedReveals: [] };
     rooms.set(name, room);
   }
   return room;
@@ -244,6 +244,8 @@ function makeSnapshot(room) {
     name: p.name,
     alive: p.alive,
     color: p.color,
+    r: p.r,
+    score: p.score,
   }));
 
   return JSON.stringify({
@@ -252,6 +254,8 @@ function makeSnapshot(room) {
     count: room.players.size,
     roster,
     players,
+    revealUntil: room.revealUntil || 0,
+    consumedReveals: room.consumedReveals || [],
     ts: Date.now(),
   });
 }
@@ -390,6 +394,8 @@ wss.on('connection', (ws) => {
         room: room.name,
         color: ws.player.color,
         spawn,
+        revealUntil: room.revealUntil || 0,
+        consumedReveals: room.consumedReveals || [],
       });
 
       broadcastRoom(room);
@@ -400,6 +406,35 @@ wss.on('connection', (ws) => {
       ws.player.name = sanitizeName(msg.name);
       const room = rooms.get(ws.player.room);
       if (room) broadcastRoom(room);
+      return;
+    }
+
+    if (msg.type === 'resume_grace') {
+      ws.player.pvpInvulnUntil = Date.now() + 900;
+      return;
+    }
+
+    if (msg.type === 'global_reveal') {
+      const room = rooms.get(ws.player.room);
+      if (room) {
+        const dur = clamp(Number(msg.duration_ms) || 30000, 5000, 45000);
+        room.revealUntil = Math.max(room.revealUntil || 0, Date.now() + dur);
+        if (msg.itemId) {
+          const id = String(msg.itemId).slice(0, 64);
+          if (!room.consumedReveals.includes(id)) {
+            room.consumedReveals.push(id);
+            if (room.consumedReveals.length > 128) room.consumedReveals.shift();
+          }
+        }
+        const payload = JSON.stringify({
+          type: 'global_reveal',
+          until: room.revealUntil || 0,
+          itemId: msg.itemId ? String(msg.itemId).slice(0,64) : '',
+        });
+        for (const p of room.players.values()) {
+          if (p.ws && p.ws.readyState === 1) p.ws.send(payload);
+        }
+      }
       return;
     }
 
@@ -543,6 +578,9 @@ setInterval(() => {
       continue;
     }
 
+    if ((room.revealUntil || 0) && now > room.revealUntil) {
+      room.revealUntil = 0;
+    }
     processRespawns(room, now);
     processRoomPvp(room, now);
     broadcastRoom(room);
