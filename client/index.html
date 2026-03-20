@@ -2976,7 +2976,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
             if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
               collected.add(ss.id);
               player.shieldHits = 1;
-              player.shieldTime = 8.0;
+              player.shieldTime = 30.0;
               player.score += 40;
               spawnBurst(ss.x, ss.y, 220, 14, 200);
             }
