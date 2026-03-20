@@ -1333,7 +1333,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const eatF = 1.12;
     const rankedAll = netRankedPlayers();
     const rankMap = new Map(rankedAll.map((p, i) => [p.id, i + 1]));
-    const rankedOthers = rankedAll.filter(p => !p.self).slice(0, 3);
+    const rankedOthers = rankedAll.filter(p => !p.self).slice(0, 5);
 
     ctx.save();
     ctx.textAlign = 'center';
@@ -1386,7 +1386,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const cy = H / 2;
     const rankedAll = netRankedPlayers();
     const rankMap = new Map(rankedAll.map((p, i) => [p.id, i + 1]));
-    const rankedOthers = rankedAll.filter(p => !p.self).slice(0, 3);
+    const rankedOthers = rankedAll.filter(p => !p.self).slice(0, 5);
 
     ctx.save();
 
@@ -1427,7 +1427,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const tx = ex - Math.cos(ang) * (16 * DPR);
       const ty = ey - Math.sin(ang) * (16 * DPR);
       const rank = rankMap.get(p.id) || 0;
-      const nm = `${medalForRank(rank)} ${String(p.name || 'anon').slice(0, 18)}`;
+      const sizeTxt = `x${Number((p.r || 18) / 18).toFixed(2)}`;
+      const nm = `${medalForRank(rank)} ${String(p.name || 'anon').slice(0, 18)} ${sizeTxt}`;
 
       ctx.globalAlpha = alpha * 0.22;
       ctx.fillStyle = baseColor;
@@ -1806,12 +1807,24 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       onlineRenderTop();
     } catch (e) {}
 
-    try {
-      const meRes = await fetch(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`);
-      const meJson = await meRes.json();
-      applyPersonalBest(meJson.row || meJson.best || null);
-    } catch (e) {
-      applyPersonalBest(bestRowLocal);
+    if (!ONLINE.mebestDisabled) {
+      try {
+        const meRes = await fetch(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`);
+        if (meRes.status === 404) {
+          ONLINE.mebestDisabled = true;
+          const topSelf = (ONLINE.top || []).find(r => String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase());
+          applyPersonalBest(topSelf || bestRowLocal);
+        } else {
+          const meJson = await meRes.json();
+          applyPersonalBest(meJson.row || meJson.best || null);
+        }
+      } catch (e) {
+        const topSelf = (ONLINE.top || []).find(r => String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase());
+        applyPersonalBest(topSelf || bestRowLocal);
+      }
+    } else {
+      const topSelf = (ONLINE.top || []).find(r => String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase());
+      applyPersonalBest(topSelf || bestRowLocal);
     }
 
     try {
@@ -2824,8 +2837,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
   // ==========================
   function doDash() {
     // dash in direction of mouse target
-    const tx = cam.x + (mouseX - W/2);
-    const ty = cam.y + (mouseY - H/2);
+    const { tx, ty } = pointerWorldTarget();
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2849,8 +2861,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     player.ejectCd = 0.18;
 
     // aim direction (world)
-    const tx = cam.x + (mouseX - W/2);
-    const ty = cam.y + (mouseY - H/2);
+    const { tx, ty } = pointerWorldTarget();
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2867,6 +2878,22 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     });
   }
 
+
+
+  function playerScreenPos() {
+    return {
+      px: W/2 + (player.x - cam.x),
+      py: H/2 + (player.y - cam.y),
+    };
+  }
+
+  function pointerWorldTarget() {
+    const { px, py } = playerScreenPos();
+    return {
+      tx: cam.x + (mouseX - px),
+      ty: cam.y + (mouseY - py),
+    };
+  }
 
   function applyTail() {
     // Add current position to tail points
@@ -2998,9 +3025,8 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
         if (dashCd <= 0) dashReady = true;
       }
 
-      // Move target in WORLD coords: cursor relative to screen center
-      const targetX = cam.x + (mouseX - W/2);
-      const targetY = cam.y + (mouseY - H/2);
+      // Move target in WORLD coords: cursor relative to the actual player screen position
+      const { tx: targetX, ty: targetY } = pointerWorldTarget();
 
       // Inertia follow
       const dx = targetX - player.x;
@@ -3749,8 +3775,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   currentBiome = biomeOf(Math.floor(player.x / CHUNK), Math.floor(player.y / CHUNK));
 
   // mouse in WORLD coords
-  const tx = cam.x + (mouseX - W/2);
-  const ty = cam.y + (mouseY - H/2);
+  const { tx, ty } = pointerWorldTarget();
 
   let dx = tx - player.x;
   let dy = ty - player.y;
