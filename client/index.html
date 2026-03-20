@@ -33,6 +33,8 @@
       user-select:none;
     }
     .pill b { color:#fff; }
+    .pill .k{ opacity:.82; font-size:12px; white-space:nowrap; }
+    .pill[data-long="1"] .k{ font-size:11px; }
     .spacer { flex:1 1 auto; }
     .btn {
       pointer-events:auto;
@@ -236,6 +238,7 @@
       }
       body.mobile-ui .pill b{ font-size:11px; }
       body.mobile-ui .pill span{ font-size:12px; }
+      body.mobile-ui .pill .k{ font-size:10px; opacity:.86; }
       body.mobile-ui #mobileJoyWrap{
         width:118px; height:118px;
       }
@@ -259,30 +262,30 @@
   </div>
 
   <div class="hud" id="hudBar">
-    <div class="pill"><span>⏱️</span> <b id="t">0.0s</b></div>
-    <div class="pill"><span>🪙</span> <b id="coins">0</b></div>
-    <div class="pill"><span>⚫</span> <b id="mass">1.0x</b></div>
-    <div class="pill"><span>✨</span> <b id="score">0</b></div>
-      <div class="pill"><span>🗿</span> <b id="relics">0/3</b></div>
-      <div class="pill"><span>🚪</span> <b id="extract">—</b></div>
-    <div class="pill"><span>❤️</span> <b id="hp">3</b></div>
-    <div class="pill"><span>🛡️</span> <b id="shield">0</b></div>
-    <div class="pill"><span>Lv</span> <b id="lv">1</b></div>
-    <div class="pill"><span>🏆</span> <b id="best">0.0s</b></div>
+    <div class="pill" title="Время текущего забега"><span>⏱️ <span class="k">Время</span></span> <b id="t">0.0s</b></div>
+    <div class="pill" title="Монеты: дают рост и длину хвоста"><span>🪙 <span class="k">Монеты</span></span> <b id="coins">0</b></div>
+    <div class="pill" title="Текущий множитель размера шара"><span>⚫ <span class="k">Размер</span></span> <b id="mass">1.0x</b></div>
+    <div class="pill" title="Очки для таблицы лидеров"><span>✨ <span class="k">Очки</span></span> <b id="score">0</b></div>
+      <div class="pill" data-long="1" title="Собери 3 реликвии, чтобы открыть портал экстракции"><span>🗿 <span class="k">Реликвии</span></span> <b id="relics">0/3</b></div>
+      <div class="pill" data-long="1" title="Статус выхода: GO = портал открыт, DONE = экстракция завершена"><span>🚪 <span class="k">Выход</span></span> <b id="extract">—</b></div>
+    <div class="pill" title="Текущие жизни"><span>❤️ <span class="k">HP</span></span> <b id="hp">3</b></div>
+    <div class="pill" title="Щит спасает от одного удара"><span>🛡️ <span class="k">Щит</span></span> <b id="shield">0</b></div>
+    <div class="pill" title="Текущий уровень сложности"><span>Lv <span class="k">Уровень</span></span> <b id="lv">1</b></div>
+    <div class="pill" title="Лучшее время выживания на этом устройстве"><span>🏆 <span class="k">Лучшее</span></span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
 	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
 	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
     <div class="spacer"></div>
-    <button class="btn" id="pause">Пауза</button>
-    <button class="btn" id="restart">Заново</button>
+    <button class="btn" id="pause" title="Пауза">Пауза</button>
+    <button class="btn" id="restart" title="Новый забег">Заново</button>
   </div>
 
   
 <div class="hint">
-  <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Слишком близко к минам = адреналин бонус.</div>
-  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Хвост растёт от монет и уязвим. 🟡 корм/монеты 🔴 мины 🟣 вирус 🟢 клетки/игроки (зелёный ободок = можно съесть, красный = опасно)</div>
+  <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). ✨ Очки идут в лидеры, 🪙 монеты дают рост.</div>
+  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Собери 3 реликвии → откроется 🚪 портал. Зелёный ободок = можно съесть, красный = опасно.</div>
 </div>
 
 <div id="netMini" style="
@@ -338,7 +341,7 @@
   <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
 
   <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Отправка результата — автоматически при поражении.
+    Лучшие результаты с никами сохраняются на сервере и доступны после перезагрузки.
   </div>
 </div>
 
@@ -673,7 +676,6 @@
   // ==========================
   // Canvas / Resize
   // ==========================
-  const wrapEl = document.getElementById('wrap');
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   const maskCanvas = document.createElement('canvas');
@@ -1607,19 +1609,28 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (NET_ENABLED) openNickGate(true);
     layoutFloatingPanels();
     syncUiLayers();
-    restoreButtonTitles();
   }
 
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
-    ONLINE.top.slice(0, 20).forEach((row, idx) => {
+
+    for (const row of ONLINE.top) {
       const li = document.createElement('li');
-      li.style.margin = '0 0 6px 0';
-      const badge = row.extracted ? ' ✅' : '';
-      li.innerHTML = `<b>${idx + 1}. ${row.name}</b> <span style="opacity:.75">— ${row.score}${badge}</span>`;
+      li.style.margin = '0 0 8px 0';
+      li.style.lineHeight = '1.35';
+
+      const bits = [];
+      bits.push(`очки ${Number(row.score || 0)}`);
+      bits.push(`время ${((Number(row.time_ms || 0))/1000).toFixed(1)}s`);
+      bits.push(`монеты ${Number(row.coins || 0)}`);
+      if (Number(row.extracted || 0)) bits.push('экстракция ✅');
+      else bits.push('экстракция —');
+
+      li.innerHTML = `<b>${String(row.name || 'anon').slice(0,18)}</b><br><span style="opacity:.78">${bits.join(' • ')}</span>`;
       onlineTopEl.appendChild(li);
-    });
+    }
+
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -1632,7 +1643,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (!onlineGhostEl) return;
     if (!ONLINE.ghost) { onlineGhostEl.textContent = 'Призрак дня: нет данных'; return; }
     const sc = (ONLINE.ghost.best_score ?? ONLINE.ghost.score ?? ONLINE.ghost.time_ms ?? 0);
-    onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} (${sc})`;
+    onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} • очки ${Number(ONLINE.ghost.score||0)} • время ${((Number(ONLINE.ghost.time_ms||0))/1000).toFixed(1)}s`;
   }
 
   async function onlineRefresh() {
@@ -1746,56 +1757,24 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   // ==========================
   let mouseX = 0, mouseY = 0;
   let hasPointer = false;
-
-  function resetPointerToCenter() {
-    hasPointer = false;
-    mouseX = W / 2;
-    mouseY = H / 2;
-  }
-
-  function updateMouseFromClient(clientX, clientY) {
+  window.addEventListener('mousemove', (e)=>{
     hasPointer = true;
-    mouseX = clientX * DPR;
-    mouseY = clientY * DPR;
-  }
-
-  // Desktop: pointer only works inside the actual game area.
-  // Outside the game area / when browser loses focus, aiming is disabled.
-  if (wrapEl) {
-    wrapEl.addEventListener('mousemove', (e) => {
-      if (MOBILE.enabled) return;
-      updateMouseFromClient(e.clientX, e.clientY);
-    }, { passive:true });
-
-    wrapEl.addEventListener('mouseenter', (e) => {
-      if (MOBILE.enabled) return;
-      updateMouseFromClient(e.clientX, e.clientY);
-    }, { passive:true });
-
-    wrapEl.addEventListener('mouseleave', () => {
-      if (MOBILE.enabled) return;
-      resetPointerToCenter();
-    }, { passive:true });
-  }
-
-  window.addEventListener('blur', () => {
-    if (!MOBILE.enabled) resetPointerToCenter();
-  });
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && !MOBILE.enabled) resetPointerToCenter();
-  });
+    mouseX = e.clientX * DPR;
+    mouseY = e.clientY * DPR;
+  }, {passive:true});
 
   // Touch support (optional)
-  // On mobile, movement must go only through the on-screen joystick.
   window.addEventListener('touchstart', (e)=>{
     if (!e.touches.length) return;
-    if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
-    updateMouseFromClient(e.touches[0].clientX, e.touches[0].clientY);
+    hasPointer = true;
+    mouseX = e.touches[0].clientX * DPR;
+    mouseY = e.touches[0].clientY * DPR;
   }, {passive:true});
   window.addEventListener('touchmove', (e)=>{
     if (!e.touches.length) return;
-    if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
-    updateMouseFromClient(e.touches[0].clientX, e.touches[0].clientY);
+    hasPointer = true;
+    mouseX = e.touches[0].clientX * DPR;
+    mouseY = e.touches[0].clientY * DPR;
   }, {passive:true});
 
   // Dash (space)
