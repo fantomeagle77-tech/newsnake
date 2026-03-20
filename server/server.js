@@ -22,6 +22,30 @@ const MIME = {
 
 const rooms = new Map();
 const leaderboards = new Map();
+const LEADERBOARD_FILE = path.join(__dirname, 'leaderboards.json');
+
+function loadLeaderboards() {
+  try {
+    if (!fs.existsSync(LEADERBOARD_FILE)) return;
+    const raw = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
+    const parsed = JSON.parse(raw || '{}');
+    for (const [key, rows] of Object.entries(parsed)) {
+      if (Array.isArray(rows)) leaderboards.set(key, rows);
+    }
+  } catch (e) {
+    console.warn('Failed to load leaderboards:', e.message);
+  }
+}
+
+function saveLeaderboards() {
+  try {
+    const payload = Object.fromEntries(leaderboards.entries());
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(payload), 'utf8');
+  } catch (e) {
+    console.warn('Failed to save leaderboards:', e.message);
+  }
+}
+
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
@@ -46,10 +70,11 @@ function leaderboardKey(seed, mode) {
 
 function sortRows(rows) {
   rows.sort((a, b) => {
-    if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
-    if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
     if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
-    return (b.time_ms | 0) - (a.time_ms | 0);
+    if ((b.time_ms | 0) !== (a.time_ms | 0)) return (b.time_ms | 0) - (a.time_ms | 0);
+    if ((b.coins | 0) !== (a.coins | 0)) return (b.coins | 0) - (a.coins | 0);
+    if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
+    return (b.created_at | 0) - (a.created_at | 0);
   });
   return rows;
 }
@@ -71,26 +96,44 @@ function submitRow(raw) {
 
   const key = leaderboardKey(row.seed, row.mode);
   const rows = leaderboards.get(key) || [];
-  rows.push(row);
+  const idx = rows.findIndex(r => sanitizeName(r.name) === row.name);
+
+  const betterThan = (a, b) => {
+    if (!b) return true;
+    if ((a.score | 0) !== (b.score | 0)) return (a.score | 0) > (b.score | 0);
+    if ((a.time_ms | 0) !== (b.time_ms | 0)) return (a.time_ms | 0) > (b.time_ms | 0);
+    if ((a.coins | 0) !== (b.coins | 0)) return (a.coins | 0) > (b.coins | 0);
+    if ((a.extracted | 0) !== (b.extracted | 0)) return (a.extracted | 0) > (b.extracted | 0);
+    return true;
+  };
+
+  if (idx >= 0) {
+    if (betterThan(row, rows[idx])) rows[idx] = { ...rows[idx], ...row };
+    else return rows[idx];
+  } else {
+    rows.push(row);
+  }
+
   sortRows(rows);
-  leaderboards.set(key, rows.slice(0, 100));
+  leaderboards.set(key, rows.slice(0, 500));
+  saveLeaderboards();
   return row;
 }
 
-function getTop(seed, mode, limit = 10) {
+function getTop(seed, mode, limit = 20) {
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
-  return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
-}
-
-function getGhost(seed, mode) {
-  const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
-  return rows.find(r => r.ghost) || rows[0] || null;
+  return rows.slice(0, clamp(Number(limit) || 20, 1, 50));
 }
 
 function getPersonalBest(seed, mode, name) {
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
   const clean = sanitizeName(name);
   return rows.find(r => sanitizeName(r.name) === clean) || null;
+}
+
+function getGhost(seed, mode) {
+  const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
+  return rows.find(r => r.ghost) || rows[0] || null;
 }
 
 function getRoom(name) {
@@ -222,6 +265,8 @@ function broadcastRoom(room) {
     }
   }
 }
+
+loadLeaderboards();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
