@@ -55,7 +55,7 @@ export async function onRequestPost({ env, request }) {
        ghost = excluded.ghost,
        updated_at = excluded.updated_at
      WHERE excluded.best_score > ghosts.best_score
-        OR (excluded.best_score = ghosts.best_score AND excluded.best_time_ms < ghosts.best_time_ms)`
+        OR (excluded.best_score = ghosts.best_score AND excluded.best_time_ms > ghosts.best_time_ms)`
   ).bind(seed, mode, score, time_ms, name, ghost || "[]", now);
 
   await env.DB.batch([insertScore, upsertGhost]);
