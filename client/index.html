@@ -860,6 +860,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     roster: [],
     globalRevealUntil: 0,
     revealConsumed: new Set(),
+    ignoreDeathUntil: 0,
   };
 
   // ==========================
@@ -1108,6 +1109,13 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
               }
 
               if (p.alive === false && state === 'RUN') {
+                const ignoreDeathNow =
+                  player.pauseGrace > 0 ||
+                  player.spawnGrace > 0 ||
+                  player.invulnTime > 0 ||
+                  performance.now() < (NET.ignoreDeathUntil || 0);
+                if (ignoreDeathNow) continue;
+
                 state = 'DEAD';
                 overlay.style.display = 'flex';
     syncUiLayers();
@@ -1161,6 +1169,13 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
       if (msg.type === 'pvp') {
         if (msg.role === 'victim') {
+          const ignoreDeathNow =
+            player.pauseGrace > 0 ||
+            player.spawnGrace > 0 ||
+            player.invulnTime > 0 ||
+            performance.now() < (NET.ignoreDeathUntil || 0);
+          if (ignoreDeathNow) return;
+
           state = 'DEAD';
           overlay.style.display = 'flex';
     syncUiLayers();
@@ -1929,23 +1944,30 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }
 
   function updatePointerFromClient(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) {
+      resetPointerToCenter();
+      return;
+    }
     hasPointer = true;
-    mouseX = clientX * DPR;
-    mouseY = clientY * DPR;
+    mouseX = localX * DPR;
+    mouseY = localY * DPR;
   }
 
-  if (wrapEl) {
-    wrapEl.addEventListener('mousemove', (e)=>{
+  if (canvas) {
+    canvas.addEventListener('mousemove', (e)=>{
       if (MOBILE.enabled) return;
       updatePointerFromClient(e.clientX, e.clientY);
     }, {passive:true});
 
-    wrapEl.addEventListener('mouseenter', (e)=>{
+    canvas.addEventListener('mouseenter', (e)=>{
       if (MOBILE.enabled) return;
       updatePointerFromClient(e.clientX, e.clientY);
     }, {passive:true});
 
-    wrapEl.addEventListener('mouseleave', ()=>{
+    canvas.addEventListener('mouseleave', ()=>{
       if (MOBILE.enabled) return;
       resetPointerToCenter();
     }, {passive:true});
@@ -2369,14 +2391,19 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
   function togglePause() {
     if (state === 'RUN') {
       state = 'PAUSE';
+      if (NET_ENABLED) netSend({ type:'pause_state', paused:true });
       showPauseOverlay();
     } else if (state === 'PAUSE') {
       state = 'RUN';
       overlay.style.display = 'none';
-      player.pauseGrace = Math.max(player.pauseGrace || 0, 0.80);
-      player.invulnTime = Math.max(player.invulnTime || 0, 0.80);
-      player.spawnGrace = Math.max(player.spawnGrace || 0, 0.80);
-      if (NET_ENABLED) netSend({ type:'resume_grace' });
+      player.pauseGrace = Math.max(player.pauseGrace || 0, 1.10);
+      player.invulnTime = Math.max(player.invulnTime || 0, 1.10);
+      player.spawnGrace = Math.max(player.spawnGrace || 0, 1.10);
+      NET.ignoreDeathUntil = performance.now() + 1400;
+      if (NET_ENABLED) {
+        netSend({ type:'pause_state', paused:false });
+        netSend({ type:'resume_grace' });
+      }
       syncUiLayers();
     }
 	AudioFX.click();
