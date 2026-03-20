@@ -23,6 +23,37 @@ const MIME = {
 const rooms = new Map();
 const leaderboards = new Map();
 
+const LEADERBOARD_FILE = path.join(__dirname, 'leaderboards.json');
+
+function compareRows(a, b) {
+  if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
+  if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
+  if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
+  return (b.time_ms | 0) - (a.time_ms | 0);
+}
+
+function loadLeaderboards() {
+  try {
+    if (!fs.existsSync(LEADERBOARD_FILE)) return;
+    const raw = JSON.parse(fs.readFileSync(LEADERBOARD_FILE, 'utf8'));
+    if (!raw || typeof raw !== 'object') return;
+    for (const [key, rows] of Object.entries(raw)) {
+      if (Array.isArray(rows)) leaderboards.set(key, rows);
+    }
+  } catch (e) {
+    console.warn('Failed to load leaderboards:', e.message);
+  }
+}
+
+function saveLeaderboards() {
+  try {
+    const payload = Object.fromEntries(leaderboards.entries());
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(payload, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('Failed to save leaderboards:', e.message);
+  }
+}
+
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
@@ -44,16 +75,13 @@ function leaderboardKey(seed, mode) {
   return `${seed || 0}::${mode || 'score'}`;
 }
 
-function compareRows(a, b) {
-  if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
-  if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
-  if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
-  return (b.time_ms | 0) - (a.time_ms | 0);
-}
-
 function sortRows(rows) {
   rows.sort(compareRows);
   return rows;
+}
+
+function isBetterRow(next, prev) {
+  return compareRows(next, prev) < 0;
 }
 
 function submitRow(raw) {
@@ -73,21 +101,20 @@ function submitRow(raw) {
 
   const key = leaderboardKey(row.seed, row.mode);
   const rows = leaderboards.get(key) || [];
+  const sameNameIdx = rows.findIndex(r => sanitizeName(r.name) === row.name);
 
-  // Keep the best server-side result per player name for this seed/mode.
-  const existingIdx = rows.findIndex(r => String(r.name).toLowerCase() === String(row.name).toLowerCase());
-  if (existingIdx >= 0) {
-    const existing = rows[existingIdx];
-    if (compareRows(row, existing) < 0) {
-      return existing;
+  if (sameNameIdx >= 0) {
+    const prev = rows[sameNameIdx];
+    if (isBetterRow(row, prev)) {
+      rows[sameNameIdx] = { ...prev, ...row };
     }
-    rows.splice(existingIdx, 1, row);
   } else {
     rows.push(row);
   }
 
   sortRows(rows);
   leaderboards.set(key, rows.slice(0, 200));
+  saveLeaderboards();
   return row;
 }
 
@@ -501,6 +528,8 @@ setInterval(() => {
     broadcastRoom(room);
   }
 }, 1000 / 15);
+
+loadLeaderboards();
 
 server.listen(PORT, HOST, () => {
   console.log(`VoidRun network server: http://${HOST}:${PORT}`);
