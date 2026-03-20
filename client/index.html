@@ -3195,7 +3195,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
               hitThisFrame = true;
               const sizeRatioBig = player.r / player.baseR;
               const canCrushMine = sizeRatioBig >= 3.6;
-              if (mineActive && canCrushMine && m.id) {
+              if (canCrushMine && m.id) {
                 collected.add(m.id);
                 crushMine(mx, my, mr);
               } else {
