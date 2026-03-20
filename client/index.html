@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>БЕГ В ТЕМНОТЕ - Онлайн игра на выживание</title>
-  <meta name="description" content="БЕГ В ТЕМНОТЕ — онлайн игра арена в темноте на выживание с ростом шара, минами, реликвиями и эвакуацией." />
+  <title>Void Run — online survival arena</title>
+  <meta name="description" content="Void Run — тёмная онлайн survival arena с ростом шара, минами, реликвиями и экстракцией." />
   <meta name="robots" content="index,follow" />
-  <meta property="og:title" content="Онлайн игра, выживание, бесплатные онлайн игры, игры онлайн играть регистрации" />
-  <meta property="og:description" content="игры онлайн играть бесплатно, бесплатные онлайн игры, игры онлайн играть регистрации, игры без регистрации, гонки, игры на выживание, браузерные игры онлайн, игры, онлайн игры." />
+  <meta property="og:title" content="Void Run — online survival arena" />
+  <meta property="og:description" content="Grow, hunt, survive, extract." />
   <style>
     html, body { margin:0; padding:0; height:100%; background:#070A12; overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #wrap { position:fixed; inset:0; display:block; }
@@ -317,7 +317,7 @@
   display:none;
 ">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-    <div style="font-weight:800;">🌐 TOP дня</div>
+    <div style="font-weight:800;">🌐 TOP 20 дня</div>
     <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
   </div>
 
@@ -673,6 +673,7 @@
   // ==========================
   // Canvas / Resize
   // ==========================
+  const wrapEl = document.getElementById('wrap');
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   const maskCanvas = document.createElement('canvas');
@@ -1457,110 +1458,68 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   function initMobileControls() {
     if (!mobileJoyWrapEl) return;
 
-    function findTouchById(list, id) {
-      if (!list) return null;
-      for (let i = 0; i < list.length; i++) {
-        if (list[i].identifier === id) return list[i];
-      }
-      return null;
-    }
-
-    function eventPoint(e, changedToo = false) {
-      if (!e) return null;
-      if (e.touches && e.touches.length) return e.touches[0];
-      if (changedToo && e.changedTouches && e.changedTouches.length) return e.changedTouches[0];
-      return e;
-    }
-
     const down = (e) => {
       if (!MOBILE.enabled) return;
-      const pt = eventPoint(e, false);
-      if (!pt) return;
-
-      // start ONLY inside joystick circle
-      if (!mobileJoyContains(pt.clientX, pt.clientY, 0)) return;
-
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      if (!pt || !mobileJoyContains(pt.clientX, pt.clientY, 0)) return;
       MOBILE.joyActive = true;
-      MOBILE.joyPointerId = ('identifier' in pt)
-        ? pt.identifier
-        : (('pointerId' in e) ? e.pointerId : 1);
-
+      MOBILE.joyPointerId = ('identifier' in pt) ? pt.identifier : ('pointerId' in e ? e.pointerId : 1);
       mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
-
       try {
-        if ('pointerId' in e && mobileJoyWrapEl.setPointerCapture) {
-          mobileJoyWrapEl.setPointerCapture(e.pointerId);
-        }
+        if ('pointerId' in e && mobileJoyWrapEl.setPointerCapture) mobileJoyWrapEl.setPointerCapture(e.pointerId);
       } catch(_) {}
-
-      if (e.cancelable) {
-        try { e.preventDefault(); } catch(_) {}
+      try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
+    };
+    const move = (e) => {
+      if (!MOBILE.enabled || !MOBILE.joyActive) return;
+      let pt = null;
+      if (e.touches) {
+        for (const t of e.touches) {
+          if (t.identifier === MOBILE.joyPointerId) { pt = t; break; }
+        }
+      } else if ('pointerId' in e) {
+        if (e.pointerId === MOBILE.joyPointerId) pt = e;
+      } else {
+        pt = e;
       }
+      if (!pt) return;
+      if (!mobileJoyContains(pt.clientX, pt.clientY, 2)) {
+        mobileResetJoy();
+        return;
+      }
+      mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
+      try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
+    };
+    const up = (e) => {
+      if (!MOBILE.enabled || !MOBILE.joyActive) return;
+      if (e.changedTouches) {
+        let matched = false;
+        for (const t of e.changedTouches) {
+          if (t.identifier === MOBILE.joyPointerId) { matched = true; break; }
+        }
+        if (!matched) return;
+      } else if ('pointerId' in e && e.pointerId !== MOBILE.joyPointerId) {
+        return;
+      }
+      try {
+        if ('pointerId' in e && mobileJoyWrapEl.releasePointerCapture) mobileJoyWrapEl.releasePointerCapture(e.pointerId);
+      } catch(_) {}
+      mobileResetJoy();
+      try { e.preventDefault(); } catch(_) {}
       try { e.stopPropagation(); } catch(_) {}
     };
 
-    const move = (e) => {
-      if (!MOBILE.enabled || !MOBILE.joyActive) return;
-
-      let pt = null;
-      if (e.touches || e.changedTouches) {
-        pt = findTouchById(e.touches, MOBILE.joyPointerId) || findTouchById(e.changedTouches, MOBILE.joyPointerId);
-      } else if ('pointerId' in e) {
-        if (e.pointerId !== MOBILE.joyPointerId) return;
-        pt = e;
-      } else {
-        pt = e;
-      }
-      if (!pt) return;
-
-      // KEEP direction even when finger leaves the circle:
-      // just clamp knob to joystick radius, do not reset here.
-      mobileUpdateJoyFromClient(pt.clientX, pt.clientY);
-
-      if (e.cancelable) {
-        try { e.preventDefault(); } catch(_) {}
-      }
-    };
-
-    const up = (e) => {
-      if (!MOBILE.enabled || !MOBILE.joyActive) return;
-
-      let matched = false;
-      if (e.changedTouches) {
-        matched = !!findTouchById(e.changedTouches, MOBILE.joyPointerId);
-      } else if ('pointerId' in e) {
-        matched = (e.pointerId === MOBILE.joyPointerId);
-      } else {
-        matched = true;
-      }
-      if (!matched) return;
-
-      try {
-        if ('pointerId' in e && mobileJoyWrapEl.releasePointerCapture) {
-          mobileJoyWrapEl.releasePointerCapture(e.pointerId);
-        }
-      } catch(_) {}
-
-      mobileResetJoy();
-
-      if (e.cancelable) {
-        try { e.preventDefault(); } catch(_) {}
-      }
-    };
-
-    // Start only from the joystick element
     mobileJoyWrapEl.addEventListener('pointerdown', down, { passive:false });
+    mobileJoyWrapEl.addEventListener('pointermove', move, { passive:false });
+    mobileJoyWrapEl.addEventListener('pointerup', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('pointercancel', up, { passive:false });
+
     mobileJoyWrapEl.addEventListener('touchstart', down, { passive:false });
-
-    // After start, track ONLY the active pointer/touch globally.
-    // This keeps direction stable without turning the whole screen into a joystick.
-    document.addEventListener('pointermove', move, { passive:false });
-    document.addEventListener('pointerup', up, { passive:false });
-    document.addEventListener('pointercancel', up, { passive:false });
-
-    document.addEventListener('touchmove', move, { passive:false });
-    document.addEventListener('touchend', up, { passive:false });
-    document.addEventListener('touchcancel', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('touchmove', move, { passive:false });
+    mobileJoyWrapEl.addEventListener('touchend', up, { passive:false });
+    mobileJoyWrapEl.addEventListener('touchcancel', up, { passive:false });
 
     bindTap(mobileDashBtnEl, async () => {
       await AudioFX.unlock();
@@ -1648,17 +1607,19 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (NET_ENABLED) openNickGate(true);
     layoutFloatingPanels();
     syncUiLayers();
+    restoreButtonTitles();
   }
 
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
-    for (const row of ONLINE.top) {
+    ONLINE.top.slice(0, 20).forEach((row, idx) => {
       const li = document.createElement('li');
       li.style.margin = '0 0 6px 0';
-      li.innerHTML = `<b>${row.name}</b> <span style="opacity:.75">— ${row.score}</span>`;
+      const badge = row.extracted ? ' ✅' : '';
+      li.innerHTML = `<b>${idx + 1}. ${row.name}</b> <span style="opacity:.75">— ${row.score}${badge}</span>`;
       onlineTopEl.appendChild(li);
-    }
+    });
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -1676,7 +1637,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   async function onlineRefresh() {
     try {
-      const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=10`);
+      const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`);
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
@@ -1785,29 +1746,56 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   // ==========================
   let mouseX = 0, mouseY = 0;
   let hasPointer = false;
-  window.addEventListener('mousemove', (e)=>{
+
+  function resetPointerToCenter() {
+    hasPointer = false;
+    mouseX = W / 2;
+    mouseY = H / 2;
+  }
+
+  function updateMouseFromClient(clientX, clientY) {
     hasPointer = true;
-    mouseX = e.clientX * DPR;
-    mouseY = e.clientY * DPR;
-  }, {passive:true});
+    mouseX = clientX * DPR;
+    mouseY = clientY * DPR;
+  }
+
+  // Desktop: pointer only works inside the actual game area.
+  // Outside the game area / when browser loses focus, aiming is disabled.
+  if (wrapEl) {
+    wrapEl.addEventListener('mousemove', (e) => {
+      if (MOBILE.enabled) return;
+      updateMouseFromClient(e.clientX, e.clientY);
+    }, { passive:true });
+
+    wrapEl.addEventListener('mouseenter', (e) => {
+      if (MOBILE.enabled) return;
+      updateMouseFromClient(e.clientX, e.clientY);
+    }, { passive:true });
+
+    wrapEl.addEventListener('mouseleave', () => {
+      if (MOBILE.enabled) return;
+      resetPointerToCenter();
+    }, { passive:true });
+  }
+
+  window.addEventListener('blur', () => {
+    if (!MOBILE.enabled) resetPointerToCenter();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && !MOBILE.enabled) resetPointerToCenter();
+  });
 
   // Touch support (optional)
-  // IMPORTANT:
-  // On mobile, aiming must be controlled ONLY by the on-screen joystick.
-  // So whole-screen touch aiming is disabled when MOBILE.enabled = true.
+  // On mobile, movement must go only through the on-screen joystick.
   window.addEventListener('touchstart', (e)=>{
     if (!e.touches.length) return;
     if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
-    hasPointer = true;
-    mouseX = e.touches[0].clientX * DPR;
-    mouseY = e.touches[0].clientY * DPR;
+    updateMouseFromClient(e.touches[0].clientX, e.touches[0].clientY);
   }, {passive:true});
   window.addEventListener('touchmove', (e)=>{
     if (!e.touches.length) return;
     if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
-    hasPointer = true;
-    mouseX = e.touches[0].clientX * DPR;
-    mouseY = e.touches[0].clientY * DPR;
+    updateMouseFromClient(e.touches[0].clientX, e.touches[0].clientY);
   }, {passive:true});
 
   // Dash (space)
