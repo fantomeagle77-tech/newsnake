@@ -718,6 +718,7 @@
   const onlineSaveBtn = document.getElementById('onlineSave');
   const onlineRefreshBtn = document.getElementById('onlineRefresh');
   const onlineGhostEl = document.getElementById('onlineGhost');
+  const onlineMyBestEl = document.getElementById('onlineMyBest');
   const onlineTopEl = document.getElementById('onlineTop');
   const onlinePanelEl = document.getElementById('onlinePanel');
   const hudBarEl = document.getElementById('hudBar');
@@ -751,10 +752,16 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   UI_REFS_READY = true;
 
-  // Best time (local)
+  // Best time / personal best (local fallback + server sync)
   const BEST_KEY = 'voidrun_best_time';
+  const BEST_ROW_KEY = 'voidrun_best_row';
   const best = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
+  let bestRowLocal = null;
+  try { bestRowLocal = JSON.parse(localStorage.getItem(BEST_ROW_KEY) || 'null'); } catch(_) {}
   elBest.textContent = best.toFixed(1) + 's';
+  if (bestRowLocal) {
+    elBest.title = `Личный рекорд: очки ${bestRowLocal.score|0} • время ${(Number(bestRowLocal.time_ms||0)/1000).toFixed(1)}s • монеты ${bestRowLocal.coins|0} • экстракция ${bestRowLocal.extracted ? '✅' : '—'}`;
+  }
 
   // ==========================
   // Utils
@@ -1645,23 +1652,41 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     syncUiLayers();
   }
 
+  function formatRunLine(row) {
+    if (!row) return 'нет данных';
+    const bits = [];
+    bits.push(`очки ${Number(row.score || 0)}`);
+    bits.push(`время ${((Number(row.time_ms || 0))/1000).toFixed(1)}s`);
+    bits.push(`монеты ${Number(row.coins || 0)}`);
+    bits.push(`экстракция ${Number(row.extracted || 0) ? '✅' : '—'}`);
+    return bits.join(' • ');
+  }
+
+  function applyPersonalBest(row) {
+    if (!onlineMyBestEl) return;
+    if (!row) {
+      onlineMyBestEl.textContent = 'Личный рекорд: пока нет данных';
+      return;
+    }
+
+    localStorage.setItem(BEST_KEY, String(((Number(row.time_ms)||0) / 1000)));
+    localStorage.setItem(BEST_ROW_KEY, JSON.stringify(row));
+
+    elBest.textContent = ((Number(row.time_ms)||0) / 1000).toFixed(1) + 's';
+    elBest.title = `Личный рекорд: ${formatRunLine(row)}`;
+
+    onlineMyBestEl.innerHTML = `Личный рекорд: <b>${row.name || 'anon'}</b> • ${formatRunLine(row)}`;
+  }
+
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
 
     for (const row of ONLINE.top) {
       const li = document.createElement('li');
-      li.style.margin = '0 0 8px 0';
-      li.style.lineHeight = '1.35';
-
-      const bits = [];
-      bits.push(`очки ${Number(row.score || 0)}`);
-      bits.push(`время ${((Number(row.time_ms || 0))/1000).toFixed(1)}s`);
-      bits.push(`монеты ${Number(row.coins || 0)}`);
-      if (Number(row.extracted || 0)) bits.push('экстракция ✅');
-      else bits.push('экстракция —');
-
-      li.innerHTML = `<b>${String(row.name || 'anon').slice(0,18)}</b><br><span style="opacity:.78">${bits.join(' • ')}</span>`;
+      li.style.margin = '0 0 10px 0';
+      li.style.lineHeight = '1.45';
+      li.innerHTML = `<b>${row.name || 'anon'}</b><br><span style="opacity:.78">${formatRunLine(row)}</span>`;
       onlineTopEl.appendChild(li);
     }
 
@@ -1675,21 +1700,42 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function onlineRenderGhostLabel() {
     if (!onlineGhostEl) return;
-    if (!ONLINE.ghost) { onlineGhostEl.textContent = 'Призрак дня: нет данных'; return; }
-    const sc = (ONLINE.ghost.best_score ?? ONLINE.ghost.score ?? ONLINE.ghost.time_ms ?? 0);
+    if (!ONLINE.ghost) {
+      onlineGhostEl.textContent = 'Призрак дня: нет данных';
+      return;
+    }
     onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} • очки ${Number(ONLINE.ghost.score||0)} • время ${((Number(ONLINE.ghost.time_ms||0))/1000).toFixed(1)}s`;
   }
 
   async function onlineRefresh() {
+    let topLoaded = false;
+
     try {
       const topRes = await fetch(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`);
+      if (!topRes.ok) throw new Error('top failed');
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
+      topLoaded = true;
     } catch (e) {}
+
+    if (!topLoaded) {
+      ONLINE.top = localLoadTop();
+      onlineRenderTop();
+    }
+
+    try {
+      const meRes = await fetch(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`);
+      if (!meRes.ok) throw new Error('mebest failed');
+      const meJson = await meRes.json();
+      applyPersonalBest(meJson.row || meJson.best || null);
+    } catch (e) {
+      applyPersonalBest(bestRowLocal);
+    }
 
     try {
       const gRes = await fetch(`/api/ghost?seed=${SEED}&mode=${MODE}`);
+      if (!gRes.ok) throw new Error('ghost failed');
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -1699,11 +1745,20 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         const parsed = JSON.parse(ONLINE.ghost.ghost);
         if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
       }
+
       onlineRenderGhostLabel();
     } catch (e) {
-      ONLINE.ghost = null;
+      ONLINE.ghost = ONLINE.top.length ? ONLINE.top[0] : null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
+
+      if (ONLINE.ghost && ONLINE.ghost.ghost) {
+        try {
+          const parsed = JSON.parse(ONLINE.ghost.ghost);
+          if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
+        } catch (_) {}
+      }
+
       onlineRenderGhostLabel();
     }
 
@@ -2393,6 +2448,17 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
       else if (portal) elExtract.textContent = 'GO';
       else elExtract.textContent = '—';
     }
+
+    elT.parentElement && (elT.parentElement.title = 'Время текущего забега');
+    elCoins.parentElement && (elCoins.parentElement.title = 'Монеты: растят шар и хвост');
+    elMass.parentElement && (elMass.parentElement.title = 'Размер шара');
+    elScore.parentElement && (elScore.parentElement.title = 'Очки: идут в лидеры');
+    elRelics.parentElement && (elRelics.parentElement.title = 'Реликвии: 3/3 открывают портал');
+    elExtract.parentElement && (elExtract.parentElement.title = 'Выход / экстракция');
+    elHP.parentElement && (elHP.parentElement.title = 'Очки здоровья');
+    elShield.parentElement && (elShield.parentElement.title = 'Щит: 1 удар, осталось ' + Math.max(0, player.shieldTime || 0).toFixed(1) + 's');
+    elLv.parentElement && (elLv.parentElement.title = 'Текущий уровень');
+    elBest.parentElement && (elBest.parentElement.title = elBest.title || 'Личный рекорд');
   }
 
   
@@ -2911,7 +2977,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
             if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
               collected.add(ss.id);
               player.shieldHits = 1;
-              player.shieldTime = 30.0;
+              player.shieldTime = 8.0;
               player.score += 40;
               spawnBurst(ss.x, ss.y, 220, 14, 200);
             }
@@ -3032,6 +3098,21 @@ if (ch.cells) {
     cc.vy = cc.vy * 0.84 + vy * 0.32;
     cc.x += cc.vx * dt;
     cc.y += cc.vy * dt;
+
+    // mines affect cells too
+    if (ch.mines) {
+      for (const m of ch.mines) {
+        const mr = m.r * mineScale;
+        const hitR = cc.r + mr * 0.82;
+        if (dist2(cc.x, cc.y, m.x, m.y) < hitR * hitR) {
+          collected.add(cc.id);
+          spawnBurst(cc.x, cc.y, cc.hue, 12, 210);
+          kickShake(4, 0.08);
+          break;
+        }
+      }
+      if (collected.has(cc.id)) continue;
+    }
 
     // collisions: bigger eats smaller
     const rr = player.r + cc.r;
@@ -3218,6 +3299,31 @@ if (ch.hunters) {
     h.x += vx * dt;
     h.y += vy * dt;
 
+    // mines affect hunters too
+    if (ch.mines) {
+      for (const m of ch.mines) {
+        const mr = m.r * mineScale;
+        const hitR = h.r + mr * 0.80;
+        if (dist2(h.x, h.y, m.x, m.y) < hitR * hitR) {
+          if (h.kind === 'charger' || h.r < 56) {
+            collected.add(h.id);
+            spawnBurst(h.x, h.y, h.hue || 120, 16, 260);
+          } else {
+            const mdx = h.x - m.x;
+            const mdy = h.y - m.y;
+            const md = Math.hypot(mdx, mdy) || 1;
+            h.cd = Math.max(h.cd || 0, 0.9);
+            vx += (mdx / md) * 220;
+            vy += (mdy / md) * 220;
+            h.x += (mdx / md) * 26;
+            h.y += (mdy / md) * 26;
+          }
+          break;
+        }
+      }
+      if (collected.has(h.id)) continue;
+    }
+
     // adrenaline when close
     if (d < (player.r + h.r + 140)) player.nearMiss += dt * 0.9;
 
@@ -3316,7 +3422,18 @@ if (ch.hunters) {
       const bestNow = parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0;
       if (timeSurv > bestNow) {
         localStorage.setItem(BEST_KEY, String(timeSurv));
+        const rowNow = {
+          name: ONLINE.name || 'anon',
+          score: player.score|0,
+          time_ms: Math.floor(timeSurv * 1000),
+          coins: player.coins|0,
+          extracted: player.extracted ? 1 : 0
+        };
+        localStorage.setItem(BEST_ROW_KEY, JSON.stringify(rowNow));
+        bestRowLocal = rowNow;
         elBest.textContent = timeSurv.toFixed(1) + 's';
+        elBest.title = `Личный рекорд: ${formatRunLine(rowNow)}`;
+        if (onlineMyBestEl) onlineMyBestEl.innerHTML = `Личный рекорд: <b>${rowNow.name}</b> • ${formatRunLine(rowNow)}`;
       }
       overlay.style.display = 'flex';
     syncUiLayers();
