@@ -1,6 +1,10 @@
-﻿function clampInt(v, a, b) {
+function clampInt(v, a, b) {
   v = Number.isFinite(v) ? Math.floor(v) : a;
   return Math.max(a, Math.min(b, v));
+}
+
+function cleanName(v) {
+  return String(v || "anon").trim().slice(0, 18) || "anon";
 }
 
 export async function onRequestPost({ env, request }) {
@@ -14,13 +18,13 @@ export async function onRequestPost({ env, request }) {
     });
   }
 
-  const name = String(body.name || "anon").slice(0, 18);
+  const name = cleanName(body.name);
   const seed = clampInt(parseInt(body.seed || 0, 10), 0, 999999999);
   const mode = String(body.mode || "score").slice(0, 16);
 
-  const score = clampInt(parseInt(body.score || 0, 10), 0, 2_000_000_000);
-  const time_ms = clampInt(parseInt(body.time_ms || 0, 10), 0, 10_000_000_000);
-  const coins = clampInt(parseInt(body.coins || 0, 10), 0, 2_000_000_000);
+  const score = clampInt(parseInt(body.score || 0, 10), 0, 2000000000);
+  const time_ms = clampInt(parseInt(body.time_ms || 0, 10), 0, 10000000000);
+  const coins = clampInt(parseInt(body.coins || 0, 10), 0, 2000000000);
   const version = String(body.version || "").slice(0, 24);
 
   const ghost = typeof body.ghost === "string" ? body.ghost : "";
@@ -60,7 +64,10 @@ export async function onRequestPost({ env, request }) {
 
   await env.DB.batch([insertScore, upsertGhost]);
 
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({
+    ok: true,
+    row: { name, seed, mode, score, time_ms, coins, version }
+  }), {
     headers: { "content-type": "application/json" },
   });
 }

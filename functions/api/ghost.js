@@ -12,16 +12,20 @@ export async function onRequestGet({ env, request }) {
   }
 
   const row = await env.DB.prepare(
-    `SELECT name,
-            best_score AS score,
-            best_time_ms AS time_ms,
-            ghost,
-            updated_at
+    `SELECT name, best_score, best_time_ms, ghost, updated_at
      FROM ghosts
      WHERE seed = ? AND mode = ?`
   ).bind(seed, mode).first();
 
-  return new Response(JSON.stringify({ seed, mode, ghost: row || null }), {
+  const ghost = row ? {
+    name: row.name,
+    score: Number(row.best_score || 0),
+    time_ms: Number(row.best_time_ms || 0),
+    ghost: row.ghost || '[]',
+    updated_at: row.updated_at,
+  } : null;
+
+  return new Response(JSON.stringify({ seed, mode, ghost }), {
     headers: { "content-type": "application/json" },
   });
 }

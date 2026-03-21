@@ -13,21 +13,15 @@ export async function onRequestGet({ env, request }) {
   }
 
   const stmt = env.DB.prepare(
-    `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, 0 AS extracted
+    `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at
      FROM scores s
      WHERE s.seed = ? AND s.mode = ?
-       AND NOT EXISTS (
-         SELECT 1
+       AND s.created_at = (
+         SELECT s2.created_at
          FROM scores s2
-         WHERE s2.seed = s.seed
-           AND s2.mode = s.mode
-           AND s2.name = s.name
-           AND (
-             s2.score > s.score
-             OR (s2.score = s.score AND s2.time_ms > s.time_ms)
-             OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins > s.coins)
-             OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND s2.created_at > s.created_at)
-           )
+         WHERE s2.seed = s.seed AND s2.mode = s.mode AND LOWER(TRIM(s2.name)) = LOWER(TRIM(s.name))
+         ORDER BY s2.score DESC, s2.time_ms DESC, s2.coins DESC, s2.created_at DESC
+         LIMIT 1
        )
      ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, s.created_at DESC
      LIMIT ?`
@@ -35,7 +29,7 @@ export async function onRequestGet({ env, request }) {
 
   const { results } = await stmt.all();
 
-  return new Response(JSON.stringify({ seed, mode, rows: results }), {
+  return new Response(JSON.stringify({ seed, mode, rows: results || [] }), {
     headers: { "content-type": "application/json" },
   });
 }
