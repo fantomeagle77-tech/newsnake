@@ -1414,8 +1414,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const dy = p.y - player.y;
       const worldDist = Math.hypot(dx, dy);
 
-      const near = 1 - clamp(worldDist / 2600, 0, 1);
-      const alpha = 0.16 + near * 0.76;
+      // stronger visibility: closer leader => brighter, larger and closer to edge center
+      const near = 1 - clamp(worldDist / 3200, 0, 1);
+      const alpha = 0.28 + near * 0.72;
+      const pulse = 0.86 + 0.14 * Math.sin(performance.now() * 0.006 + (rankMap.get(p.id) || 0));
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
       const baseColor = rel > 0
         ? 'rgba(110,255,170,1)'
@@ -1424,22 +1426,45 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         : (p.color || 'rgba(121,200,255,1)');
 
       const ang = Math.atan2(vy, vx);
-      const tx = ex - Math.cos(ang) * (16 * DPR);
-      const ty = ey - Math.sin(ang) * (16 * DPR);
+      const dotR = (11 + near * 15) * DPR * pulse;
+      const tx = ex - Math.cos(ang) * (26 * DPR);
+      const ty = ey - Math.sin(ang) * (26 * DPR);
       const rank = rankMap.get(p.id) || 0;
       const sizeTxt = `x${Number((p.r || 18) / 18).toFixed(2)}`;
       const nm = `${medalForRank(rank)} ${String(p.name || 'anon').slice(0, 18)} ${sizeTxt}`;
 
+      // outer glow
       ctx.globalAlpha = alpha * 0.22;
       ctx.fillStyle = baseColor;
       ctx.beginPath();
-      ctx.arc(ex, ey, (10 + near * 10) * DPR, 0, TAU);
+      ctx.arc(ex, ey, dotR * 1.8, 0, TAU);
       ctx.fill();
 
-      ctx.globalAlpha = alpha * 0.95;
-      ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+      // core dot
+      ctx.globalAlpha = alpha * 0.98;
+      ctx.fillStyle = baseColor;
+      ctx.beginPath();
+      ctx.arc(ex, ey, dotR, 0, TAU);
+      ctx.fill();
+
+      // directional little arrow
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(ang);
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.fillStyle = baseColor;
+      ctx.beginPath();
+      ctx.moveTo(dotR * 1.35, 0);
+      ctx.lineTo(dotR * 0.15, -dotR * 0.8);
+      ctx.lineTo(dotR * 0.15, dotR * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = 'rgba(0,0,0,0.82)';
       ctx.lineWidth = 5 * DPR;
-      ctx.font = `${Math.max(11 * DPR, (12 + near * 5) * DPR)}px system-ui,Segoe UI,Arial`;
+      ctx.font = `${Math.max(12 * DPR, (13 + near * 10) * DPR)}px system-ui,Segoe UI,Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.strokeText(nm, tx, ty);
@@ -1949,23 +1974,36 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
   }
 
-  // IMPORTANT: use the old working scheme from RELEASE_6_WORK:
-  // screen-space cursor around the screen center, but only while the cursor is inside the game field.
-  window.addEventListener('mousemove', (e)=>{
-    if (MOBILE.enabled) return;
-    if (!pointerInsideGame(e.clientX, e.clientY)) {
-      resetPointerToCenter();
-      return;
-    }
+  function updatePointerFromClient(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
     hasPointer = true;
-    mouseX = e.clientX * DPR;
-    mouseY = e.clientY * DPR;
-  }, {passive:true});
+    mouseX = (clientX - rect.left) * DPR;
+    mouseY = (clientY - rect.top) * DPR;
+  }
 
-  window.addEventListener('mouseleave', ()=>{
-    if (MOBILE.enabled) return;
-    resetPointerToCenter();
-  }, {passive:true});
+  // Desktop mouse: only inside the actual game canvas.
+  // Use RELEASE mouse feel, but in canvas-local coordinates so devtools / browser chrome do not distort aiming.
+  if (wrapEl) {
+    wrapEl.addEventListener('mousemove', (e)=>{
+      if (MOBILE.enabled) return;
+      if (!pointerInsideGame(e.clientX, e.clientY)) {
+        resetPointerToCenter();
+        return;
+      }
+      updatePointerFromClient(e.clientX, e.clientY);
+    }, {passive:true});
+
+    wrapEl.addEventListener('mouseenter', (e)=>{
+      if (MOBILE.enabled) return;
+      if (!pointerInsideGame(e.clientX, e.clientY)) return;
+      updatePointerFromClient(e.clientX, e.clientY);
+    }, {passive:true});
+
+    wrapEl.addEventListener('mouseleave', ()=>{
+      if (MOBILE.enabled) return;
+      resetPointerToCenter();
+    }, {passive:true});
+  }
 
   window.addEventListener('blur', ()=>{
     if (!MOBILE.enabled) resetPointerToCenter();
@@ -3307,6 +3345,7 @@ if (ch.cells) {
         if (dist2(cc.x, cc.y, m.x, m.y) < hitR * hitR) {
           collected.add(cc.id);
           spawnBurst(cc.x, cc.y, cc.hue, 12, 210);
+          spawnPelletBurst(cc.x, cc.y, clamp(Math.round(cc.r / 8), 4, 10), 200 + cc.r * 1.6);
           kickShake(4, 0.08);
           break;
         }
@@ -3508,6 +3547,7 @@ if (ch.hunters) {
           if (h.kind === 'charger' || h.r < 56) {
             collected.add(h.id);
             spawnBurst(h.x, h.y, h.hue || 120, 16, 260);
+            spawnPelletBurst(h.x, h.y, clamp(Math.round(h.r / 7), 5, 12), 220 + h.r * 1.9);
           } else {
             const mdx = h.x - m.x;
             const mdy = h.y - m.y;
