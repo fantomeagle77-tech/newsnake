@@ -339,10 +339,14 @@
     Призрак дня: загрузка…
   </div>
 
-  <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:220px; overflow:auto;"></ol>
+  <div id="onlineMyBest" style="margin-top:8px; font-size:12px; opacity:.86;">
+    Личный рекорд: загрузка…
+  </div>
+
+  <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:260px; overflow:auto;"></ol>
 
   <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Лучшие результаты с никами сохраняются на сервере и доступны после перезагрузки.
+    Лучшие результаты по никам хранятся в D1 и доступны после перезагрузки.
   </div>
 </div>
 
@@ -677,6 +681,7 @@
   // ==========================
   // Canvas / Resize
   // ==========================
+  const wrapEl = document.getElementById('wrap');
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   const maskCanvas = document.createElement('canvas');
@@ -855,6 +860,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     joinSent: false,
     heartbeatAcc: 0,
     roster: [],
+    globalRevealUntil: 0,
+    revealConsumed: new Set(),
+    ignoreDeathUntil: 0,
   };
 
   // ==========================
@@ -958,6 +966,47 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }
 
 
+  function netRankedPlayers() {
+    const rows = [];
+    rows.push({
+      id: NET.id || 'self',
+      name: ONLINE.name || 'anon',
+      self: true,
+      alive: state === 'RUN' || state === 'PAUSE',
+      color: NET.color || '#79C8FF',
+      r: Number(player.r || 18),
+      score: Number(player.score || 0),
+    });
+    for (const p of NET.players.values()) {
+      if (!p) continue;
+      rows.push({
+        id: p.id,
+        name: p.name || 'anon',
+        self: p.id === NET.id,
+        alive: p.alive !== false,
+        color: p.color || '#79C8FF',
+        r: Number(p.r || 18),
+        score: Number(p.score || 0),
+      });
+    }
+    const uniq = new Map();
+    for (const r of rows) uniq.set(r.id, r);
+    const out = [...uniq.values()];
+    out.sort((a, b) => {
+      if ((b.alive ? 1 : 0) !== (a.alive ? 1 : 0)) return (b.alive ? 1 : 0) - (a.alive ? 1 : 0);
+      if ((b.r || 0) !== (a.r || 0)) return (b.r || 0) - (a.r || 0);
+      return (b.score || 0) - (a.score || 0);
+    });
+    return out;
+  }
+
+  function medalForRank(rank) {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return `#${rank}`;
+  }
+
   function netRenderMiniList() {
     const count = NET.onlineCount || 1;
     if (netCountEl) netCountEl.textContent = String(count);
@@ -965,15 +1014,19 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
     if (!netPlayersListEl) return;
 
-    const rows = [];
-    const roster = Array.isArray(NET.roster) && NET.roster.length
-      ? NET.roster
-      : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }];
+    const ranked = netRankedPlayers();
+    const top = ranked.slice(0, 10);
 
-    for (const item of roster) {
-      const self = item.self || item.id === NET.id;
-      rows.push(`${self ? '🟢' : '⚪'} ${self ? 'ты' : String(item.name || 'anon').slice(0,18)}${self ? `: ${String(ONLINE.name || item.name || 'anon').slice(0,18)}` : ''}`);
-    }
+    const rows = top.map((item, idx) => {
+      const rank = idx + 1;
+      const self = !!item.self;
+      const sizeTxt = `x${Number((item.r || 18) / 18).toFixed(2)}`;
+      const label = self
+        ? `ты: ${String(ONLINE.name || item.name || 'anon').slice(0,18)}`
+        : String(item.name || 'anon').slice(0,18);
+      const dot = self ? '🟢' : (item.alive ? '⚪' : '⚫');
+      return `${medalForRank(rank)} ${dot} ${label} — ${sizeTxt}`;
+    });
 
     netPlayersListEl.innerHTML = rows.join('<br>');
   }
@@ -1033,6 +1086,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         NET.spawn = msg.spawn || { x: 0, y: 0 };
         NET.roster = [{ id: NET.id, name: ONLINE.name || 'anon', self: true }];
         NET.onlineCount = 1;
+        NET.globalRevealUntil = Number(msg.revealUntil || 0) || 0;
+        if (Array.isArray(msg.consumedReveals)) {
+          for (const id of msg.consumedReveals) NET.revealConsumed.add(String(id));
+        }
         netRenderMiniList();
         return;
       }
@@ -1054,6 +1111,13 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
               }
 
               if (p.alive === false && state === 'RUN') {
+                const ignoreDeathNow =
+                  player.pauseGrace > 0 ||
+                  player.spawnGrace > 0 ||
+                  player.invulnTime > 0 ||
+                  performance.now() < (NET.ignoreDeathUntil || 0);
+                if (ignoreDeathNow) continue;
+
                 state = 'DEAD';
                 overlay.style.display = 'flex';
     syncUiLayers();
@@ -1074,6 +1138,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         NET.roster = Array.isArray(msg.roster)
           ? msg.roster.map(p => ({ ...p, self: p.id === NET.id }))
           : [{ id: NET.id || 'self', name: ONLINE.name || 'anon', self: true }, ...Array.from(NET.players.values()).map(p => ({ id: p.id, name: p.name }))];
+        NET.globalRevealUntil = Math.max(Number(msg.revealUntil || 0) || 0, NET.globalRevealUntil || 0);
+        if (Array.isArray(msg.consumedReveals)) {
+          for (const id of msg.consumedReveals) NET.revealConsumed.add(String(id));
+        }
 
         netRenderMiniList();
         updateHUD();
@@ -1090,8 +1158,26 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         return;
       }
 
+      if (msg.type === 'global_reveal') {
+        NET.globalRevealUntil = Math.max(Number(msg.until || 0) || 0, NET.globalRevealUntil || 0);
+        if (msg.itemId) {
+          const id = String(msg.itemId);
+          NET.revealConsumed.add(id);
+          collected.add(id);
+        }
+        AudioFX.power?.();
+        return;
+      }
+
       if (msg.type === 'pvp') {
         if (msg.role === 'victim') {
+          const ignoreDeathNow =
+            player.pauseGrace > 0 ||
+            player.spawnGrace > 0 ||
+            player.invulnTime > 0 ||
+            performance.now() < (NET.ignoreDeathUntil || 0);
+          if (ignoreDeathNow) return;
+
           state = 'DEAD';
           overlay.style.display = 'flex';
     syncUiLayers();
@@ -1247,11 +1333,15 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (!NET_ENABLED) return;
 
     const eatF = 1.12;
+    const rankedAll = netRankedPlayers();
+    const rankMap = new Map(rankedAll.map((p, i) => [p.id, i + 1]));
+    const rankedOthers = rankedAll.filter(p => !p.self).slice(0, 5);
+
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
 
-    for (const p of NET.players.values()) {
+    for (const p of rankedOthers) {
       if (!p.alive) continue;
 
       const x = sx(p.x);
@@ -1272,7 +1362,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       ctx.lineWidth = 5 * DPR;
       ctx.strokeStyle = 'rgba(0,0,0,0.82)';
       ctx.font = `${Math.max(12 * DPR, p.r * 0.44)}px system-ui,Segoe UI,Arial`;
-      const nm = String(p.name || 'anon').slice(0,18);
+      const rank = rankMap.get(p.id) || 0;
+      const nm = `${medalForRank(rank)} ${String(p.name || 'anon').slice(0,18)}`;
       ctx.strokeText(nm, x, labelY);
 
       ctx.fillStyle = rel > 0
@@ -1295,10 +1386,13 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const pad = 34 * DPR;
     const cx = W / 2;
     const cy = H / 2;
+    const rankedAll = netRankedPlayers();
+    const rankMap = new Map(rankedAll.map((p, i) => [p.id, i + 1]));
+    const rankedOthers = rankedAll.filter(p => !p.self).slice(0, 5);
 
     ctx.save();
 
-    for (const p of NET.players.values()) {
+    for (const p of rankedOthers) {
       if (!p.alive) continue;
 
       const x = sx(p.x);
@@ -1334,7 +1428,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const ang = Math.atan2(vy, vx);
       const tx = ex - Math.cos(ang) * (16 * DPR);
       const ty = ey - Math.sin(ang) * (16 * DPR);
-      const nm = String(p.name || 'anon').slice(0, 18);
+      const rank = rankMap.get(p.id) || 0;
+      const sizeTxt = `x${Number((p.r || 18) / 18).toFixed(2)}`;
+      const nm = `${medalForRank(rank)} ${String(p.name || 'anon').slice(0, 18)} ${sizeTxt}`;
 
       ctx.globalAlpha = alpha * 0.22;
       ctx.fillStyle = baseColor;
@@ -1616,6 +1712,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     }
     if (onlinePanelEl) onlinePanelEl.style.display = 'none';
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
+    if (onlineMyBestEl) onlineMyBestEl.textContent = 'Личный рекорд: загрузка…';
 
     syncNickInputs();
     netRenderMiniList();
@@ -1683,7 +1780,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
-
     for (const row of ONLINE.top) {
       const li = document.createElement('li');
       li.style.margin = '0 0 10px 0';
@@ -1691,7 +1787,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       li.innerHTML = `<b>${row.name || 'anon'}</b><br><span style="opacity:.78">${formatRunLine(row)}</span>`;
       onlineTopEl.appendChild(li);
     }
-
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -1702,42 +1797,35 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function onlineRenderGhostLabel() {
     if (!onlineGhostEl) return;
-    if (!ONLINE.ghost) {
-      onlineGhostEl.textContent = 'Призрак дня: нет данных';
-      return;
-    }
+    if (!ONLINE.ghost) { onlineGhostEl.textContent = 'Призрак дня: нет данных'; return; }
     onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} • очки ${Number(ONLINE.ghost.score||0)} • время ${((Number(ONLINE.ghost.time_ms||0))/1000).toFixed(1)}s`;
   }
 
   async function onlineRefresh() {
-    let topLoaded = false;
-
     try {
       const topRes = await fetch(apiUrl(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`));
-      if (!topRes.ok) throw new Error('top failed');
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
-      topLoaded = true;
     } catch (e) {}
 
-    if (!topLoaded) {
-      ONLINE.top = localLoadTop();
-      onlineRenderTop();
-    }
-
-    try {
-      const meRes = await fetch(apiUrl(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`));
-      if (!meRes.ok) throw new Error('mebest failed');
-      const meJson = await meRes.json();
-      applyPersonalBest(meJson.row || meJson.best || null);
-    } catch (e) {
-      applyPersonalBest(bestRowLocal);
+    {
+      const topSelf = (ONLINE.top || []).find(r =>
+        String(r.name || '').trim().toLowerCase() === String(ONLINE.name || '').trim().toLowerCase()
+      );
+      let myBest = null;
+      try {
+        const meRes = await fetch(apiUrl(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`));
+        if (meRes.ok) {
+          const meJson = await meRes.json();
+          myBest = meJson.row || meJson.best || null;
+        }
+      } catch (_) {}
+      applyPersonalBest(myBest || topSelf || bestRowLocal);
     }
 
     try {
       const gRes = await fetch(apiUrl(`/api/ghost?seed=${SEED}&mode=${MODE}`));
-      if (!gRes.ok) throw new Error('ghost failed');
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -1747,20 +1835,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         const parsed = JSON.parse(ONLINE.ghost.ghost);
         if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
       }
-
       onlineRenderGhostLabel();
     } catch (e) {
-      ONLINE.ghost = ONLINE.top.length ? ONLINE.top[0] : null;
+      ONLINE.ghost = null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
-
-      if (ONLINE.ghost && ONLINE.ghost.ghost) {
-        try {
-          const parsed = JSON.parse(ONLINE.ghost.ghost);
-          if (Array.isArray(parsed)) ONLINE.ghostPath = parsed;
-        } catch (_) {}
-      }
-
       onlineRenderGhostLabel();
     }
 
@@ -1816,7 +1895,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   async function onlineSubmitResult(forceSubmit=false) {
     try {
-      if (MODE === 'expedition' && !forceSubmit && !player.extracted) return;
       const payload = {
         name: ONLINE.name || 'anon',
         seed: SEED,
@@ -1834,6 +1912,26 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
       });
+
+      const curBest = bestRowLocal;
+      const better =
+        !curBest ||
+        (Number(payload.score || 0) > Number(curBest.score || 0)) ||
+        (
+          Number(payload.score || 0) === Number(curBest.score || 0) &&
+          Number(payload.time_ms || 0) > Number(curBest.time_ms || 0)
+        ) ||
+        (
+          Number(payload.score || 0) === Number(curBest.score || 0) &&
+          Number(payload.time_ms || 0) === Number(curBest.time_ms || 0) &&
+          Number(payload.coins || 0) > Number(curBest.coins || 0)
+        );
+
+      if (better) {
+        bestRowLocal = { ...payload };
+        applyPersonalBest(bestRowLocal);
+      }
+
       await onlineRefresh();
     } catch (e) {}
   }
@@ -1848,27 +1946,55 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   // ==========================
   let mouseX = 0, mouseY = 0;
   let hasPointer = false;
+
+  function resetPointerToCenter() {
+    hasPointer = false;
+    mouseX = W/2;
+    mouseY = H/2;
+  }
+
+  function pointerInsideGame(clientX, clientY) {
+    if (!canvas) return false;
+    const rect = canvas.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  // IMPORTANT: use the old working scheme from RELEASE_6_WORK:
+  // screen-space cursor around the screen center, but only while the cursor is inside the game field.
   window.addEventListener('mousemove', (e)=>{
+    if (MOBILE.enabled) return;
+    if (!pointerInsideGame(e.clientX, e.clientY)) {
+      resetPointerToCenter();
+      return;
+    }
     hasPointer = true;
     mouseX = e.clientX * DPR;
     mouseY = e.clientY * DPR;
   }, {passive:true});
+
+  window.addEventListener('mouseleave', ()=>{
+    if (MOBILE.enabled) return;
+    resetPointerToCenter();
+  }, {passive:true});
+
+  window.addEventListener('blur', ()=>{
+    if (!MOBILE.enabled) resetPointerToCenter();
+  });
+  document.addEventListener('visibilitychange', ()=>{
+    if (document.hidden && !MOBILE.enabled) resetPointerToCenter();
+  });
 
   // Touch support (optional)
   // On mobile, movement must be controlled ONLY by the on-screen joystick.
   window.addEventListener('touchstart', (e)=>{
     if (!e.touches.length) return;
     if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
-    hasPointer = true;
-    mouseX = e.touches[0].clientX * DPR;
-    mouseY = e.touches[0].clientY * DPR;
+    updatePointerFromClient(e.touches[0].clientX, e.touches[0].clientY);
   }, {passive:true});
   window.addEventListener('touchmove', (e)=>{
     if (!e.touches.length) return;
     if (typeof MOBILE !== 'undefined' && MOBILE.enabled) return;
-    hasPointer = true;
-    mouseX = e.touches[0].clientX * DPR;
-    mouseY = e.touches[0].clientY * DPR;
+    updatePointerFromClient(e.touches[0].clientX, e.touches[0].clientY);
   }, {passive:true});
 
   // Dash (space)
@@ -1911,6 +2037,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const coins = [];
     const mines = [];
     const torches = [];
+    const reveals = [];
     const heals = [];
     const shields = [];
     const mimics = [];
@@ -1959,7 +2086,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const phase = rnd()*TAU;
       const drift = 0.25 + rnd()*0.85;
       const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
-      mines.push({x,y,r,phase,drift,kind,seekCd:rnd()*2,seekT:0});
+      mines.push({id: key + ':m:' + i, x,y,r,phase,drift,kind,seekCd:rnd()*2,seekT:0});
     }
 
     // torch pickup (reveals area)
@@ -1969,6 +2096,15 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const y = baseY + rnd()*CHUNK;
       const id = key + ':t:0';
       torches.push({x,y,r:14,id});
+    }
+
+    // global reveal orb: opens visibility for everyone for 30s
+    const revealP = (level >= 4) ? 0.030 : 0;
+    if (rnd() < revealP) {
+      const x = baseX + rnd()*CHUNK;
+      const y = baseY + rnd()*CHUNK;
+      const id = key + ':rv:0';
+      reveals.push({x,y,r:15,id});
     }
 
     // heal orb
@@ -2067,7 +2203,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       relics.push({ id: key + ':rel:0', x, y, r, type });
     }
 
-c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cells, hunters, slimes, t: tickCounter};
+c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viruses, cells, hunters, slimes, t: tickCounter};
     chunkMap.set(key, c);
 
     if (chunkMap.size > MAX_CHUNKS_KEEP) {
@@ -2100,6 +2236,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 	torchTime: 0,
     invulnTime: 0,
     spawnGrace: 0,
+    pauseGrace: 0,
     slowMul: 1,
     ejectCd: 0,
     
@@ -2258,10 +2395,19 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   function togglePause() {
     if (state === 'RUN') {
       state = 'PAUSE';
+      if (NET_ENABLED) netSend({ type:'pause_state', paused:true });
       showPauseOverlay();
     } else if (state === 'PAUSE') {
       state = 'RUN';
       overlay.style.display = 'none';
+      player.pauseGrace = Math.max(player.pauseGrace || 0, 1.10);
+      player.invulnTime = Math.max(player.invulnTime || 0, 1.10);
+      player.spawnGrace = Math.max(player.spawnGrace || 0, 1.10);
+      NET.ignoreDeathUntil = performance.now() + 1400;
+      if (NET_ENABLED) {
+        netSend({ type:'pause_state', paused:false });
+        netSend({ type:'resume_grace' });
+      }
       syncUiLayers();
     }
 	AudioFX.click();
@@ -2284,6 +2430,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     player.torchTime = 0;
     player.invulnTime = 1.35;
     player.spawnGrace = 1.8;
+    player.pauseGrace = 0;
 
     player.relics = [];
     player.mods = { beam:0, aura:0, magnet:0, echo:0, antiSlow:0 };
@@ -2461,6 +2608,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     elShield.parentElement && (elShield.parentElement.title = 'Щит: 1 удар, осталось ' + Math.max(0, player.shieldTime || 0).toFixed(1) + 's');
     elLv.parentElement && (elLv.parentElement.title = 'Текущий уровень');
     elBest.parentElement && (elBest.parentElement.title = elBest.title || 'Личный рекорд');
+    if (netPlayersListEl) netPlayersListEl.title = 'Онлайн-игроки, отсортированные по размеру';
   }
 
   
@@ -2680,8 +2828,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   // ==========================
   function doDash() {
     // dash in direction of mouse target
-    const tx = cam.x + (mouseX - W/2);
-    const ty = cam.y + (mouseY - H/2);
+    const { tx, ty } = pointerWorldTarget();
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2705,8 +2852,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     player.ejectCd = 0.18;
 
     // aim direction (world)
-    const tx = cam.x + (mouseX - W/2);
-    const ty = cam.y + (mouseY - H/2);
+    const { tx, ty } = pointerWorldTarget();
     const dx = tx - player.x;
     const dy = ty - player.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -2724,7 +2870,25 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
   }
 
 
+
+  function playerScreenPos() {
+    return {
+      px: W/2 + (player.x - cam.x),
+      py: H/2 + (player.y - cam.y),
+    };
+  }
+
+  function pointerWorldTarget() {
+    // Old working RELEASE_6 scheme:
+    // cursor relative to screen center -> world target around camera/player.
+    return {
+      tx: cam.x + (mouseX - W/2),
+      ty: cam.y + (mouseY - H/2),
+    };
+  }
+
   function applyTail() {
+
     // Add current position to tail points
     const last = tail.points[tail.points.length - 1];
     if (!last || dist2(last.x,last.y, player.x, player.y) > tail.spacing*tail.spacing) {
@@ -2742,6 +2906,43 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
     tail.maxLen = Math.max(0, tail.maxLen - amount);
     const maxPts = Math.max(0, Math.floor(tail.maxLen / tail.spacing));
     if (tail.points.length > maxPts) tail.points.splice(0, tail.points.length - maxPts);
+  }
+
+  function activateGlobalReveal(itemId = '', durationMs = 30000, sendNet = false) {
+    const until = Date.now() + durationMs;
+    NET.globalRevealUntil = Math.max(NET.globalRevealUntil || 0, until);
+    if (itemId) {
+      const id = String(itemId);
+      NET.revealConsumed.add(id);
+      collected.add(id);
+    }
+    AudioFX.power?.();
+    if (sendNet && NET_ENABLED) {
+      netSend({ type:'global_reveal', room: NET.room, itemId, duration_ms: durationMs });
+    }
+  }
+
+  function crushMine(mx, my, mineR = 0) {
+    if (player.shieldHits > 0) {
+      player.shieldHits = Math.max(0, player.shieldHits - 1);
+      player.shieldTime = 0;
+    } else {
+      const sizeRatio = player.r / player.baseR;
+      const coinLoss = clamp(Math.round(player.coins * 0.05 + sizeRatio * 2), 2, 22);
+      player.coins = Math.max(0, player.coins - coinLoss);
+      player.score = Math.max(0, player.score - Math.round(coinLoss * 1.5));
+      loseTailSegments(90 + coinLoss * 6);
+    }
+    const dx = player.x - mx;
+    const dy = player.y - my;
+    const d = Math.hypot(dx, dy) || 1;
+    player.vx += (dx / d) * 260;
+    player.vy += (dy / d) * 260;
+    player.invulnTime = Math.max(player.invulnTime, 0.95);
+    player.pauseGrace = Math.max(player.pauseGrace, 0.15);
+    kickShake(9, 0.12);
+    spawnBurst(mx, my, 20, 14, 220);
+    AudioFX.hit?.();
   }
 
   // ==========================
@@ -2764,6 +2965,7 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
 	  player.torchTime = Math.max(0, player.torchTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
       player.spawnGrace = Math.max(0, player.spawnGrace - dt);
+      player.pauseGrace = Math.max(0, player.pauseGrace - dt);
       player.shieldTime = Math.max(0, player.shieldTime - dt);
       if (player.shieldTime <= 0 && player.shieldHits > 0) player.shieldHits = 0;
 
@@ -2816,9 +3018,8 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
         if (dashCd <= 0) dashReady = true;
       }
 
-      // Move target in WORLD coords: cursor relative to screen center
-      const targetX = cam.x + (mouseX - W/2);
-      const targetY = cam.y + (mouseY - H/2);
+      // Move target in WORLD coords: cursor relative to the actual player screen position
+      const { tx: targetX, ty: targetY } = pointerWorldTarget();
 
       // Inertia follow
       const dx = targetX - player.x;
@@ -3038,7 +3239,14 @@ c = {biome, coins, mines, torches, heals, shields, relics, mimics, viruses, cell
           if (player.invulnTime <= 0 && d2 < hitR*hitR) {
             if (!hitThisFrame) {
               hitThisFrame = true;
-              damagePlayer();
+              const sizeRatioBig = player.r / player.baseR;
+              const canCrushMine = sizeRatioBig >= 3.6;
+              if (canCrushMine && m.id) {
+                collected.add(m.id);
+                crushMine(mx, my, mr);
+              } else {
+                damagePlayer();
+              }
             }
           }
 
@@ -3388,7 +3596,7 @@ if (ch.hunters) {
 
   function damagePlayer() {
 	AudioFX.hit();
-    if (player.invulnTime > 0) return;
+    if (player.invulnTime > 0 || player.pauseGrace > 0) return;
 
     if (player.shieldHits > 0) {
       player.shieldHits = Math.max(0, player.shieldHits - 1);
@@ -3560,8 +3768,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   currentBiome = biomeOf(Math.floor(player.x / CHUNK), Math.floor(player.y / CHUNK));
 
   // mouse in WORLD coords
-  const tx = cam.x + (mouseX - W/2);
-  const ty = cam.y + (mouseY - H/2);
+  const { tx, ty } = pointerWorldTarget();
 
   let dx = tx - player.x;
   let dy = ty - player.y;
@@ -3575,21 +3782,26 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
   const shrink = clamp(level * 22, 0, base * 0.70);
   const sizeBoost = clamp((player.r - player.baseR) * 18, 0, base * 0.85);
   const torchBoost = (player.torchTime > 0) ? base * 1.40 : 0;
-  const vis = clamp(base - shrink + sizeBoost + torchBoost, 240 * DPR, 1200 * DPR);
+  const globalRevealOn = Date.now() < (NET.globalRevealUntil || 0);
+  const vis = globalRevealOn
+    ? Math.max(W, H) * 3.4
+    : clamp(base - shrink + sizeBoost + torchBoost, 240 * DPR, 1200 * DPR);
 
   const sizeRatioR = player.r / player.baseR;
   const mineScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.45, 1.0);
   const trapScaleR = clamp(1 / Math.sqrt(sizeRatioR), 0.55, 1.0);
 
   // flashlight parameters (beam)
-  const beamLen = vis * 1.25;                 // length of the beam
-  const beamHalf = 0.30;                      // half-angle (radians)
+  const beamLen = globalRevealOn ? vis * 1.5 : vis * 1.25;                 // length of the beam
+  const beamHalf = globalRevealOn ? 1.28 : 0.30;                           // half-angle (radians)
   const startR = clamp(player.r * 0.55, 16*DPR, 34*DPR); // start radius
-  const endR2 = clamp(beamLen * Math.tan(beamHalf) * 0.9, 70*DPR, 150*DPR); // rounded head radius
-  const featherPx = 28 * DPR;                 // blur for soft edge (vignette)
+  const endR2 = globalRevealOn
+    ? Math.max(W, H) * 1.25
+    : clamp(beamLen * Math.tan(beamHalf) * 0.9, 70*DPR, 150*DPR); // rounded head radius
+  const featherPx = globalRevealOn ? 46 * DPR : 28 * DPR;         // blur for soft edge (vignette)
 
   // small aura around player (3–4 ball radii)
-  const auraR = clamp(player.r * 3.6, 70*DPR, 280*DPR);
+  const auraR = globalRevealOn ? Math.max(W, H) * 0.95 : clamp(player.r * 3.6, 70*DPR, 280*DPR);
 
   // === 1) Draw the WORLD full-screen (it will be masked) ===
   drawBackground();
@@ -3659,6 +3871,15 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
           const x = sx(tt.x), y = sy(tt.y);
           if (x<-80 || y<-80 || x>W+80 || y>H+80) continue;
           drawTorch(x,y,tt.r);
+        }
+      }
+
+      if (ch.reveals) {
+        for (const rv of ch.reveals) {
+          if (collected.has(rv.id) || NET.revealConsumed.has(rv.id)) continue;
+          const x = sx(rv.x), y = sy(rv.y);
+          if (x<-100 || y<-100 || x>W+100 || y>H+100) continue;
+          drawRevealOrb(x,y,rv.r);
         }
       }
 
@@ -3734,6 +3955,18 @@ if (ch.hunters) {
 
   // player (world)
   drawPlayer(sx(player.x), sy(player.y), player.r);
+
+  if (globalRevealOn) {
+    ctx.save();
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle = 'rgba(180,220,255,0.95)';
+    ctx.font = `${Math.max(14*DPR, 18*DPR)}px system-ui,Segoe UI,Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const left = Math.max(0, (NET.globalRevealUntil - Date.now()) / 1000);
+    ctx.fillText(`👁 Полная визуализация для всех: ${left.toFixed(1)}s`, W/2, 16*DPR);
+    ctx.restore();
+  }
   if (player.shieldHits > 0) {
     ctx.save();
     const pxs = sx(player.x), pys = sy(player.y);
@@ -3908,6 +4141,32 @@ function drawCoin(x,y,r) {
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 2*DPR;
     ctx.beginPath(); ctx.arc(x,y,r*0.75,0,TAU); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRevealOrb(x,y,r){
+    ctx.save();
+    const pulse = 1 + Math.sin(performance.now()*0.006) * 0.10;
+    const glow = ctx.createRadialGradient(x,y,1, x,y, r*6*pulse);
+    glow.addColorStop(0, 'rgba(180,220,255,0.46)');
+    glow.addColorStop(1, 'rgba(180,220,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x,y,r*6*pulse,0,TAU); ctx.fill();
+
+    const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
+    g.addColorStop(0,'#F7FDFF');
+    g.addColorStop(1,'#8AB8FF');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x,y,r*1.1,0,TAU); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.42)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath(); ctx.arc(x,y,r*0.82,0,TAU); ctx.stroke();
+
+    ctx.fillStyle = 'rgba(10,18,34,0.95)';
+    ctx.font = `${Math.max(12*DPR, r*1.0)}px system-ui,Segoe UI,Arial`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👁', x, y+1*DPR);
     ctx.restore();
   }
 
