@@ -2984,8 +2984,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
       player.invulnTime = Math.max(0, player.invulnTime - dt);
       player.spawnGrace = Math.max(0, player.spawnGrace - dt);
       player.pauseGrace = Math.max(0, player.pauseGrace - dt);
-      player.shieldTime = Math.max(0, player.shieldTime - dt);
-      if (player.shieldTime <= 0 && player.shieldHits > 0) player.shieldHits = 0;
+      
 
       // echo relic pulse
       if ((player.mods.echo||0) > 0) {
@@ -3197,7 +3196,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
             const rr = player.r + ss.r + 8;
             if (dist2(player.x, player.y, ss.x, ss.y) < rr*rr) {
               collected.add(ss.id);
-              player.shieldHits = 1;
+              player.shieldHits = 30;
               player.shieldTime = 30.0;
               player.score += 40;
               spawnBurst(ss.x, ss.y, 220, 14, 200);
