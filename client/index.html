@@ -2541,6 +2541,19 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
   });
 
+  const btnMusicEl = document.getElementById("btnMusic");
+  const btnSoundEl = document.getElementById("btnSound");
+
+  if (btnMusicEl) {
+    const musOn = (localStorage.getItem('newsnake_mus') ?? '0') === '1';
+    btnMusicEl.style.opacity = musOn ? '1' : '0.55';
+  }
+
+  if (btnSoundEl) {
+    const sfxOn = (localStorage.getItem('newsnake_sfx') ?? '1') === '1';
+    btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
+  }
+	
   function toggleTopPanel(){
     if (!onlinePanelEl) return;
     const cur = onlinePanelEl.style.display;
