@@ -218,9 +218,15 @@
       left:max(8px, env(safe-area-inset-left)) !important;
       right:max(8px, env(safe-area-inset-right)) !important;
       width:auto !important;
-      max-height:42vh;
+      max-height:68vh;
       overflow:auto;
       border-radius:16px !important;
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
+    }
+    body.mobile-ui #onlineTop{
+      max-height:34vh !important;
+      overflow:auto !important;
+      -webkit-overflow-scrolling: touch;
     }
     body.mobile-ui.portrait-ui #mobileRotateTip{ display:block; }
     @media (max-width: 900px), (pointer: coarse) {
@@ -273,7 +279,9 @@
     <div class="pill" title="Текущий уровень сложности"><span>Lv <span class="k">Уровень</span></span> <b id="lv">1</b></div>
     <div class="pill" title="Лучшее время выживания на этом устройстве"><span>🏆 <span class="k">Лучшее</span></span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
+	<button class="btn" id="btnPrevTrack" title="Предыдущий трек">⏮</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
+	<button class="btn" id="btnNextTrack" title="Следующий трек">⏭</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
 	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
 	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
@@ -588,6 +596,7 @@
         const a = ambientAudio;
         fadeAmbientTo(0, 450, () => {
           try { a.pause(); } catch (e) {}
+          syncMediaSession();
         });
       }
     }
@@ -610,23 +619,61 @@
       try {
         await a.play();
         fadeAmbientTo(musicOn ? musVol : 0, 900);
+        syncMediaSession();
       } catch (e) {
         // ждём следующего явного клика по кнопке музыки
       }
     }
 
+    function mediaTitle() {
+      try {
+        if (!AMBIENT_TRACKS.length) return 'Void Run';
+        const src = AMBIENT_TRACKS[(ambientTrackIndex >= 0 ? ambientTrackIndex : chooseAmbientTrackIndex()) % AMBIENT_TRACKS.length] || '';
+        return src.split('/').pop() || 'Void Run';
+      } catch(_) { return 'Void Run'; }
+    }
+
+    function syncMediaSession() {
+      try {
+        if (!('mediaSession' in navigator)) return;
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: musicOn ? mediaTitle() : 'Музыка выключена',
+          artist: 'Void Run',
+          album: 'newsnake.win'
+        });
+        navigator.mediaSession.playbackState = (musicOn && ambientAudio && !ambientAudio.paused) ? 'playing' : 'paused';
+      } catch(_) {}
+    }
+
+    async function stepAmbientTrack(dir = 1) {
+      await unlock();
+      if (!AMBIENT_TRACKS.length) return ambientTrackIndex;
+      if (ambientTrackIndex < 0) ambientTrackIndex = chooseAmbientTrackIndex();
+      ambientTrackIndex = (ambientTrackIndex + dir + AMBIENT_TRACKS.length) % AMBIENT_TRACKS.length;
+      if (ambientAudio) {
+        ambientAudio.src = AMBIENT_TRACKS[ambientTrackIndex];
+      }
+      if (musicOn) {
+        await startMusic();
+      } else {
+        ensureAmbientAudio().src = AMBIENT_TRACKS[ambientTrackIndex];
+      }
+      syncMediaSession();
+      return ambientTrackIndex;
+    }
+
     async function toggleMusic() {
       await unlock();
-      const a = ambientAudio;
-      if (musicOn && (!a || a.paused)) {
-        if (musGain) musGain.gain.value = musVol;
+      if (musicOn && ambientAudio && ambientAudio.paused) {
         await startMusic();
-        return true;
+        syncMediaSession();
+        return musicOn;
       }
       musicOn = !musicOn;
       localStorage.setItem(LS_MUS, musicOn ? '1' : '0');
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
       if (musicOn) await startMusic(); else stopMusic();
+      syncMediaSession();
       return musicOn;
     }
 
@@ -670,6 +717,8 @@
     const api = {
       unlock, autoUnlock,
       toggleEnabled, toggleMusic,
+      prevTrack: ()=>stepAmbientTrack(-1),
+      nextTrack: ()=>stepAmbientTrack(1),
       setSfxVol, setMusicVol,
       click: ()=>beep(560,0.06,'sine',0.7,1.0),
       coin: ()=>beep(880,0.08,'triangle',0.9,1.12),
@@ -731,7 +780,6 @@
   const onlineGhostEl = document.getElementById('onlineGhost');
   const API_BASE = String(window.VOIDRUN_API_BASE || localStorage.getItem('voidrun_api_base') || (location.hostname === 'play.newsnake.win' ? 'https://newsnake-a8b.pages.dev' : '') || '').replace(/\/$/, '');
   const apiUrl = (path) => API_BASE ? (API_BASE + path) : path;
-  const TOP_PANEL_KEY = 'newsnake_top_panel_open';
   const onlineMyBestEl = document.getElementById('onlineMyBest');
   const onlineTopEl = document.getElementById('onlineTop');
   const onlinePanelEl = document.getElementById('onlinePanel');
@@ -981,10 +1029,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       self: true,
       alive: state === 'RUN' || state === 'PAUSE',
       color: NET.color || '#79C8FF',
-      r: Number(player.r || 18),
-      score: Number(player.score || 0),
       x: Number(player.x || 0),
       y: Number(player.y || 0),
+      r: Number(player.r || 18),
+      score: Number(player.score || 0),
     });
     for (const p of NET.players.values()) {
       if (!p) continue;
@@ -994,10 +1042,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         self: p.id === NET.id,
         alive: p.alive !== false,
         color: p.color || '#79C8FF',
-        r: Number(p.r || 18),
-        score: Number(p.score || 0),
         x: Number(p.x || 0),
         y: Number(p.y || 0),
+        r: Number(p.r || 18),
+        score: Number(p.score || 0),
       });
     }
     const uniq = new Map();
@@ -1427,8 +1475,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const dy = p.y - player.y;
       const worldDist = Math.hypot(dx, dy);
 
-      const near = 1 - clamp(worldDist / 3200, 0, 1);
-      const alpha = 0.32 + near * 0.68;
+      const near = 1 - clamp(worldDist / 2600, 0, 1);
+      const alpha = 0.16 + near * 0.76;
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
       const baseColor = rel > 0
         ? 'rgba(110,255,170,1)'
@@ -1452,7 +1500,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       ctx.globalAlpha = alpha * 0.95;
       ctx.strokeStyle = 'rgba(0,0,0,0.78)';
       ctx.lineWidth = 5 * DPR;
-      ctx.font = `${Math.max(12 * DPR, (14 + near * 8) * DPR)}px system-ui,Segoe UI,Arial`;
+      ctx.font = `${Math.max(11 * DPR, (12 + near * 5) * DPR)}px system-ui,Segoe UI,Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.strokeText(nm, tx, ty);
@@ -1700,7 +1748,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       syncUiLayers();
       document.body.classList.toggle('portrait-ui', MOBILE.enabled && window.innerHeight > window.innerWidth);
       if (MOBILE.enabled) {
-        MOBILE.aimDist = window.innerWidth > window.innerHeight ? 240 : 190;
+        MOBILE.aimDist = window.innerWidth > window.innerHeight ? 320 : 280;
       }
       layoutFloatingPanels();
       if (!MOBILE.enabled) mobileResetJoy();
@@ -1721,7 +1769,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         ? `room ${NET_ROOM} • seed ${SEED}`
         : `seed ${SEED}`;
     }
-    if (onlinePanelEl) setTopPanelOpen(isTopPanelOpen());
+    if (onlinePanelEl) onlinePanelEl.style.display = 'none';
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
     if (onlineMyBestEl) onlineMyBestEl.textContent = 'Личный рекорд: загрузка…';
 
@@ -2541,51 +2589,55 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
 
   AudioFX.autoUnlock();
 
-  const btnMusicEl = document.getElementById("btnMusic");
-  const btnSoundEl = document.getElementById("btnSound");
-
-  function syncAudioButtons() {
-    if (btnMusicEl) {
-      const musOn = (localStorage.getItem('newsnake_mus') ?? '0') === '1';
-      btnMusicEl.textContent = musOn ? '🎵' : '🔕';
-      btnMusicEl.style.opacity = musOn ? '1' : '0.72';
-      btnMusicEl.title = musOn ? 'Музыка: вкл' : 'Музыка: выкл';
-    }
-    if (btnSoundEl) {
-      const sfxOn = (localStorage.getItem('newsnake_sfx') ?? '1') === '1';
-      btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
-      btnSoundEl.style.opacity = sfxOn ? '1' : '0.72';
-      btnSoundEl.title = sfxOn ? 'Звук: вкл' : 'Звук: выкл';
-    }
-  }
-
   bindTap(document.getElementById("btnSound"), async () => {
     await AudioFX.unlock();
-    AudioFX.toggleEnabled();
-    syncAudioButtons();
+    const on = AudioFX.toggleEnabled();
+    document.getElementById("btnSound").textContent = on ? "🔊" : "🔈";
   });
 
   bindTap(document.getElementById("btnMusic"), async () => {
-    await AudioFX.toggleMusic();
-    syncAudioButtons();
+    const on = await AudioFX.toggleMusic();
+    document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
   });
 
-  syncAudioButtons();
+  const btnMusicEl = document.getElementById("btnMusic");
+  const btnSoundEl = document.getElementById("btnSound");
 
-  function isTopPanelOpen() {
-    const saved = localStorage.getItem(TOP_PANEL_KEY);
-    return saved === null ? true : saved === '1';
+  if (btnMusicEl) {
+    const musOn = (localStorage.getItem('newsnake_mus') ?? '0') === '1';
+    btnMusicEl.style.opacity = musOn ? '1' : '0.55';
   }
 
-  function setTopPanelOpen(open) {
-    if (!onlinePanelEl) return;
-    onlinePanelEl.style.display = open ? 'block' : 'none';
-    localStorage.setItem(TOP_PANEL_KEY, open ? '1' : '0');
+  if (btnSoundEl) {
+    const sfxOn = (localStorage.getItem('newsnake_sfx') ?? '1') === '1';
+    btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
   }
 
+  bindTap(document.getElementById("btnPrevTrack"), async () => {
+    await AudioFX.unlock();
+    await AudioFX.prevTrack();
+    document.getElementById("btnMusic").style.opacity = '1';
+  });
+
+  bindTap(document.getElementById("btnNextTrack"), async () => {
+    await AudioFX.unlock();
+    await AudioFX.nextTrack();
+    document.getElementById("btnMusic").style.opacity = '1';
+  });
+
+  try {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('previoustrack', () => { AudioFX.prevTrack().catch?.(()=>{}); });
+      navigator.mediaSession.setActionHandler('nexttrack', () => { AudioFX.nextTrack().catch?.(()=>{}); });
+      navigator.mediaSession.setActionHandler('play', () => { AudioFX.toggleMusic().catch?.(()=>{}); });
+      navigator.mediaSession.setActionHandler('pause', () => { AudioFX.toggleMusic().catch?.(()=>{}); });
+    }
+  } catch(_) {}
+	
   function toggleTopPanel(){
     if (!onlinePanelEl) return;
-    setTopPanelOpen(onlinePanelEl.style.display === 'none' || onlinePanelEl.style.display === '');
+    const cur = onlinePanelEl.style.display;
+    onlinePanelEl.style.display = (cur === 'none' || cur === '') ? 'block' : 'none';
   }
 
   bindTap(document.getElementById("btnTop"), async () => {
