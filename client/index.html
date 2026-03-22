@@ -218,15 +218,9 @@
       left:max(8px, env(safe-area-inset-left)) !important;
       right:max(8px, env(safe-area-inset-right)) !important;
       width:auto !important;
-      max-height:68vh;
+      max-height:42vh;
       overflow:auto;
       border-radius:16px !important;
-      padding-bottom: max(14px, env(safe-area-inset-bottom));
-    }
-    body.mobile-ui #onlineTop{
-      max-height:34vh !important;
-      overflow:auto !important;
-      -webkit-overflow-scrolling: touch;
     }
     body.mobile-ui.portrait-ui #mobileRotateTip{ display:block; }
     @media (max-width: 900px), (pointer: coarse) {
@@ -279,9 +273,7 @@
     <div class="pill" title="Текущий уровень сложности"><span>Lv <span class="k">Уровень</span></span> <b id="lv">1</b></div>
     <div class="pill" title="Лучшее время выживания на этом устройстве"><span>🏆 <span class="k">Лучшее</span></span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
-	<button class="btn" id="btnPrevTrack" title="Предыдущий трек">⏮</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
-	<button class="btn" id="btnNextTrack" title="Следующий трек">⏭</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
 	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
 	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
@@ -596,7 +588,6 @@
         const a = ambientAudio;
         fadeAmbientTo(0, 450, () => {
           try { a.pause(); } catch (e) {}
-          syncMediaSession();
         });
       }
     }
@@ -619,61 +610,17 @@
       try {
         await a.play();
         fadeAmbientTo(musicOn ? musVol : 0, 900);
-        syncMediaSession();
       } catch (e) {
         // ждём следующего явного клика по кнопке музыки
       }
     }
 
-    function mediaTitle() {
-      try {
-        if (!AMBIENT_TRACKS.length) return 'Void Run';
-        const src = AMBIENT_TRACKS[(ambientTrackIndex >= 0 ? ambientTrackIndex : chooseAmbientTrackIndex()) % AMBIENT_TRACKS.length] || '';
-        return src.split('/').pop() || 'Void Run';
-      } catch(_) { return 'Void Run'; }
-    }
-
-    function syncMediaSession() {
-      try {
-        if (!('mediaSession' in navigator)) return;
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: musicOn ? mediaTitle() : 'Музыка выключена',
-          artist: 'Void Run',
-          album: 'newsnake.win'
-        });
-        navigator.mediaSession.playbackState = (musicOn && ambientAudio && !ambientAudio.paused) ? 'playing' : 'paused';
-      } catch(_) {}
-    }
-
-    async function stepAmbientTrack(dir = 1) {
-      await unlock();
-      if (!AMBIENT_TRACKS.length) return ambientTrackIndex;
-      if (ambientTrackIndex < 0) ambientTrackIndex = chooseAmbientTrackIndex();
-      ambientTrackIndex = (ambientTrackIndex + dir + AMBIENT_TRACKS.length) % AMBIENT_TRACKS.length;
-      if (ambientAudio) {
-        ambientAudio.src = AMBIENT_TRACKS[ambientTrackIndex];
-      }
-      if (musicOn) {
-        await startMusic();
-      } else {
-        ensureAmbientAudio().src = AMBIENT_TRACKS[ambientTrackIndex];
-      }
-      syncMediaSession();
-      return ambientTrackIndex;
-    }
-
     async function toggleMusic() {
       await unlock();
-      if (musicOn && ambientAudio && ambientAudio.paused) {
-        await startMusic();
-        syncMediaSession();
-        return musicOn;
-      }
       musicOn = !musicOn;
       localStorage.setItem(LS_MUS, musicOn ? '1' : '0');
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
       if (musicOn) await startMusic(); else stopMusic();
-      syncMediaSession();
       return musicOn;
     }
 
@@ -717,8 +664,6 @@
     const api = {
       unlock, autoUnlock,
       toggleEnabled, toggleMusic,
-      prevTrack: ()=>stepAmbientTrack(-1),
-      nextTrack: ()=>stepAmbientTrack(1),
       setSfxVol, setMusicVol,
       click: ()=>beep(560,0.06,'sine',0.7,1.0),
       coin: ()=>beep(880,0.08,'triangle',0.9,1.12),
@@ -778,7 +723,7 @@
   const onlineSaveBtn = document.getElementById('onlineSave');
   const onlineRefreshBtn = document.getElementById('onlineRefresh');
   const onlineGhostEl = document.getElementById('onlineGhost');
-  const API_BASE = String(window.VOIDRUN_API_BASE || localStorage.getItem('voidrun_api_base') || (location.hostname === 'play.newsnake.win' ? 'https://newsnake-a8b.pages.dev' : '') || '').replace(/\/$/, '');
+  const API_BASE = String(window.VOIDRUN_API_BASE || (location.hostname === 'play.newsnake.win' ? 'https://newsnake-a8b.pages.dev' : '') || '').replace(/\/$/, '');
   const apiUrl = (path) => API_BASE ? (API_BASE + path) : path;
   const onlineMyBestEl = document.getElementById('onlineMyBest');
   const onlineTopEl = document.getElementById('onlineTop');
@@ -1029,8 +974,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       self: true,
       alive: state === 'RUN' || state === 'PAUSE',
       color: NET.color || '#79C8FF',
-      x: Number(player.x || 0),
-      y: Number(player.y || 0),
       r: Number(player.r || 18),
       score: Number(player.score || 0),
     });
@@ -1042,8 +985,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         self: p.id === NET.id,
         alive: p.alive !== false,
         color: p.color || '#79C8FF',
-        x: Number(p.x || 0),
-        y: Number(p.y || 0),
         r: Number(p.r || 18),
         score: Number(p.score || 0),
       });
@@ -1748,7 +1689,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       syncUiLayers();
       document.body.classList.toggle('portrait-ui', MOBILE.enabled && window.innerHeight > window.innerWidth);
       if (MOBILE.enabled) {
-        MOBILE.aimDist = window.innerWidth > window.innerHeight ? 320 : 280;
+        MOBILE.aimDist = window.innerWidth > window.innerHeight ? 240 : 190;
       }
       layoutFloatingPanels();
       if (!MOBILE.enabled) mobileResetJoy();
@@ -1862,11 +1803,16 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   async function onlineRefresh() {
     try {
-      const topRes = await fetch(apiUrl(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`));
+      const topRes = await fetch(apiUrl(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`), { cache:'no-store' });
+      if (!topRes.ok) throw new Error(`top failed: ${topRes.status}`);
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[VoidRun] top refresh failed', e);
+      ONLINE.top = localLoadTop();
+      onlineRenderTop();
+    }
 
     {
       const topSelf = (ONLINE.top || []).find(r =>
@@ -1874,17 +1820,19 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       );
       let myBest = null;
       try {
-        const meRes = await fetch(apiUrl(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`));
-        if (meRes.ok) {
-          const meJson = await meRes.json();
-          myBest = meJson.row || meJson.best || null;
-        }
-      } catch (_) {}
+        const meRes = await fetch(apiUrl(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`), { cache:'no-store' });
+        if (!meRes.ok) throw new Error(`mebest failed: ${meRes.status}`);
+        const meJson = await meRes.json();
+        myBest = meJson.row || meJson.best || null;
+      } catch (e) {
+        console.warn('[VoidRun] mebest refresh failed', e);
+      }
       applyPersonalBest(myBest || topSelf || bestRowLocal);
     }
 
     try {
-      const gRes = await fetch(apiUrl(`/api/ghost?seed=${SEED}&mode=${MODE}`));
+      const gRes = await fetch(apiUrl(`/api/ghost?seed=${SEED}&mode=${MODE}`), { cache:'no-store' });
+      if (!gRes.ok) throw new Error(`ghost failed: ${gRes.status}`);
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -1896,6 +1844,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       }
       onlineRenderGhostLabel();
     } catch (e) {
+      console.warn('[VoidRun] ghost refresh failed', e);
       ONLINE.ghost = null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
@@ -1966,11 +1915,13 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         version: 'newsnake-pages-v1',
         ghost: JSON.stringify(ONLINE.rec),
       };
-      await fetch(apiUrl('/api/submit'), {
+      const res = await fetch(apiUrl('/api/submit'), {
         method: 'POST',
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
+        cache:'no-store',
       });
+      if (!res.ok) throw new Error(`submit failed: ${res.status}`);
 
       const curBest = bestRowLocal;
       const better =
@@ -1992,7 +1943,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       }
 
       await onlineRefresh();
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[VoidRun] submit failed', e);
+    }
   }
 
 
@@ -2505,6 +2458,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     player.combo = 0;
     player.comboTimer = 0;
     player.torchTime = 0;
+    player.revealTime = 0;
     player.invulnTime = 1.35;
     player.spawnGrace = 1.8;
     player.pauseGrace = 0;
@@ -2612,27 +2566,6 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     const sfxOn = (localStorage.getItem('newsnake_sfx') ?? '1') === '1';
     btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
   }
-
-  bindTap(document.getElementById("btnPrevTrack"), async () => {
-    await AudioFX.unlock();
-    await AudioFX.prevTrack();
-    document.getElementById("btnMusic").style.opacity = '1';
-  });
-
-  bindTap(document.getElementById("btnNextTrack"), async () => {
-    await AudioFX.unlock();
-    await AudioFX.nextTrack();
-    document.getElementById("btnMusic").style.opacity = '1';
-  });
-
-  try {
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.setActionHandler('previoustrack', () => { AudioFX.prevTrack().catch?.(()=>{}); });
-      navigator.mediaSession.setActionHandler('nexttrack', () => { AudioFX.nextTrack().catch?.(()=>{}); });
-      navigator.mediaSession.setActionHandler('play', () => { AudioFX.toggleMusic().catch?.(()=>{}); });
-      navigator.mediaSession.setActionHandler('pause', () => { AudioFX.toggleMusic().catch?.(()=>{}); });
-    }
-  } catch(_) {}
 	
   function toggleTopPanel(){
     if (!onlinePanelEl) return;
@@ -3074,6 +3007,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
       onlineGhostRecord(dt);
       onlineGhostStep();
 	  player.torchTime = Math.max(0, player.torchTime - dt);
+      player.revealTime = Math.max(0, player.revealTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
       player.spawnGrace = Math.max(0, player.spawnGrace - dt);
       player.pauseGrace = Math.max(0, player.pauseGrace - dt);
@@ -3267,6 +3201,22 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
 			}
 		  }
 		}
+
+        // global reveal orb (full map for 30s)
+        if (ch.reveals) {
+          for (const rv of ch.reveals) {
+            if (collected.has(rv.id)) continue;
+            const rr = player.r + rv.r + 10;
+            if (dist2(player.x, player.y, rv.x, rv.y) < rr*rr) {
+              collected.add(rv.id);
+              player.revealTime = Math.max(player.revealTime || 0, 30.0);
+              player.torchTime = Math.max(player.torchTime || 0, 30.0);
+              player.score += 60;
+              spawnBurst(rv.x, rv.y, 205, 18, 260);
+              AudioFX.power?.();
+            }
+          }
+        }
 
         // heal orbs
         if (ch.heals) {
@@ -4858,6 +4808,7 @@ function drawPlayerOutline(x,y,r){
 
   function drawFog() {
 	  if (state !== 'RUN') return;
+      if ((player.revealTime || 0) > 0) return;
 
 	  const px = W/2 + (player.x - cam.x);
 	  const py = H/2 + (player.y - cam.y);
