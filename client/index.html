@@ -1804,15 +1804,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   async function onlineRefresh() {
     try {
       const topRes = await fetch(apiUrl(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`), { cache:'no-store' });
-      if (!topRes.ok) throw new Error(`top failed: ${topRes.status}`);
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
-    } catch (e) {
-      console.warn('[VoidRun] top refresh failed', e);
-      ONLINE.top = localLoadTop();
-      onlineRenderTop();
-    }
+    } catch (e) {}
 
     {
       const topSelf = (ONLINE.top || []).find(r =>
@@ -1821,18 +1816,16 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       let myBest = null;
       try {
         const meRes = await fetch(apiUrl(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`), { cache:'no-store' });
-        if (!meRes.ok) throw new Error(`mebest failed: ${meRes.status}`);
-        const meJson = await meRes.json();
-        myBest = meJson.row || meJson.best || null;
-      } catch (e) {
-        console.warn('[VoidRun] mebest refresh failed', e);
-      }
+        if (meRes.ok) {
+          const meJson = await meRes.json();
+          myBest = meJson.row || meJson.best || null;
+        }
+      } catch (_) {}
       applyPersonalBest(myBest || topSelf || bestRowLocal);
     }
 
     try {
       const gRes = await fetch(apiUrl(`/api/ghost?seed=${SEED}&mode=${MODE}`), { cache:'no-store' });
-      if (!gRes.ok) throw new Error(`ghost failed: ${gRes.status}`);
       const gJson = await gRes.json();
       ONLINE.ghost = gJson.ghost || gJson.row || (Array.isArray(gJson.rows) ? gJson.rows[0] : null) || null;
       ONLINE.ghostPath = [];
@@ -1844,7 +1837,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       }
       onlineRenderGhostLabel();
     } catch (e) {
-      console.warn('[VoidRun] ghost refresh failed', e);
       ONLINE.ghost = null;
       ONLINE.ghostPath = [];
       ONLINE.ghostIdx = 0;
@@ -1915,13 +1907,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         version: 'newsnake-pages-v1',
         ghost: JSON.stringify(ONLINE.rec),
       };
-      const res = await fetch(apiUrl('/api/submit'), {
+      await fetch(apiUrl('/api/submit'), {
         method: 'POST',
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
-        cache:'no-store',
       });
-      if (!res.ok) throw new Error(`submit failed: ${res.status}`);
 
       const curBest = bestRowLocal;
       const better =
@@ -1943,9 +1933,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       }
 
       await onlineRefresh();
-    } catch (e) {
-      console.warn('[VoidRun] submit failed', e);
-    }
+    } catch (e) {}
   }
 
 
@@ -2458,7 +2446,6 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     player.combo = 0;
     player.comboTimer = 0;
     player.torchTime = 0;
-    player.revealTime = 0;
     player.invulnTime = 1.35;
     player.spawnGrace = 1.8;
     player.pauseGrace = 0;
@@ -3007,7 +2994,6 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
       onlineGhostRecord(dt);
       onlineGhostStep();
 	  player.torchTime = Math.max(0, player.torchTime - dt);
-      player.revealTime = Math.max(0, player.revealTime - dt);
       player.invulnTime = Math.max(0, player.invulnTime - dt);
       player.spawnGrace = Math.max(0, player.spawnGrace - dt);
       player.pauseGrace = Math.max(0, player.pauseGrace - dt);
@@ -3202,18 +3188,15 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
 		  }
 		}
 
-        // global reveal orb (full map for 30s)
+        // global reveal orb (full map reveal for everyone)
         if (ch.reveals) {
           for (const rv of ch.reveals) {
-            if (collected.has(rv.id)) continue;
+            if (collected.has(rv.id) || NET.revealConsumed.has(rv.id)) continue;
             const rr = player.r + rv.r + 10;
-            if (dist2(player.x, player.y, rv.x, rv.y) < rr*rr) {
-              collected.add(rv.id);
-              player.revealTime = Math.max(player.revealTime || 0, 30.0);
-              player.torchTime = Math.max(player.torchTime || 0, 30.0);
+            if (dist2(player.x, player.y, rv.x, rv.y) < rr * rr) {
+              activateGlobalReveal(rv.id, 30000, true);
               player.score += 60;
-              spawnBurst(rv.x, rv.y, 205, 18, 260);
-              AudioFX.power?.();
+              spawnBurst(rv.x, rv.y, 230, 18, 220);
             }
           }
         }
@@ -4808,7 +4791,6 @@ function drawPlayerOutline(x,y,r){
 
   function drawFog() {
 	  if (state !== 'RUN') return;
-      if ((player.revealTime || 0) > 0) return;
 
 	  const px = W/2 + (player.x - cam.x);
 	  const py = H/2 + (player.y - cam.y);
