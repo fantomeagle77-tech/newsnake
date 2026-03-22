@@ -23,37 +23,6 @@ const MIME = {
 const rooms = new Map();
 const leaderboards = new Map();
 
-const LEADERBOARD_FILE = path.join(__dirname, 'leaderboards.json');
-
-function compareRows(a, b) {
-  if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
-  if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
-  if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
-  return (b.time_ms | 0) - (a.time_ms | 0);
-}
-
-function loadLeaderboards() {
-  try {
-    if (!fs.existsSync(LEADERBOARD_FILE)) return;
-    const raw = JSON.parse(fs.readFileSync(LEADERBOARD_FILE, 'utf8'));
-    if (!raw || typeof raw !== 'object') return;
-    for (const [key, rows] of Object.entries(raw)) {
-      if (Array.isArray(rows)) leaderboards.set(key, rows);
-    }
-  } catch (e) {
-    console.warn('Failed to load leaderboards:', e.message);
-  }
-}
-
-function saveLeaderboards() {
-  try {
-    const payload = Object.fromEntries(leaderboards.entries());
-    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(payload, null, 2), 'utf8');
-  } catch (e) {
-    console.warn('Failed to save leaderboards:', e.message);
-  }
-}
-
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
@@ -76,12 +45,13 @@ function leaderboardKey(seed, mode) {
 }
 
 function sortRows(rows) {
-  rows.sort(compareRows);
+  rows.sort((a, b) => {
+    if ((b.extracted | 0) !== (a.extracted | 0)) return (b.extracted | 0) - (a.extracted | 0);
+    if ((b.relics | 0) !== (a.relics | 0)) return (b.relics | 0) - (a.relics | 0);
+    if ((b.score | 0) !== (a.score | 0)) return (b.score | 0) - (a.score | 0);
+    return (b.time_ms | 0) - (a.time_ms | 0);
+  });
   return rows;
-}
-
-function isBetterRow(next, prev) {
-  return compareRows(next, prev) < 0;
 }
 
 function submitRow(raw) {
@@ -101,31 +71,26 @@ function submitRow(raw) {
 
   const key = leaderboardKey(row.seed, row.mode);
   const rows = leaderboards.get(key) || [];
-  const sameNameIdx = rows.findIndex(r => sanitizeName(r.name) === row.name);
-
-  if (sameNameIdx >= 0) {
-    const prev = rows[sameNameIdx];
-    if (isBetterRow(row, prev)) {
-      rows[sameNameIdx] = { ...prev, ...row };
-    }
-  } else {
-    rows.push(row);
-  }
-
+  rows.push(row);
   sortRows(rows);
-  leaderboards.set(key, rows.slice(0, 200));
-  saveLeaderboards();
+  leaderboards.set(key, rows.slice(0, 100));
   return row;
 }
 
-function getTop(seed, mode, limit = 20) {
+function getTop(seed, mode, limit = 10) {
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
-  return rows.slice(0, clamp(Number(limit) || 20, 1, 50));
+  return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
 }
 
 function getGhost(seed, mode) {
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
   return rows.find(r => r.ghost) || rows[0] || null;
+}
+
+function getPersonalBest(seed, mode, name) {
+  const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
+  const clean = sanitizeName(name);
+  return rows.find(r => sanitizeName(r.name) === clean) || null;
 }
 
 function getRoom(name) {
@@ -146,7 +111,6 @@ function resetPlayerState(p, spawn = randomSpawn()) {
   p.score = 0;
   p.alive = true;
   p.extracted = false;
-  p.paused = false;
   p.spawn = spawn;
   p.respawnAt = 0;
   p.pvpInvulnUntil = Date.now() + 1800;
@@ -213,7 +177,13 @@ function serveStatic(req, res, pathname) {
 
     const ext = path.extname(filePath).toLowerCase();
     const type = MIME[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type });
+    const headers = { 'content-type': type };
+    if (ext === '.html' || ext === '.js' || ext === '.json') {
+      headers['cache-control'] = 'no-store, no-cache, must-revalidate';
+      headers['pragma'] = 'no-cache';
+      headers['expires'] = '0';
+    }
+    res.writeHead(200, headers);
     res.end(data);
   });
 }
@@ -259,31 +229,47 @@ function broadcastRoom(room) {
   }
 }
 
+
+async function proxyCloudflareApi(req, res, targetUrl) {
+  try {
+    const method = req.method || 'GET';
+    let body = undefined;
+    const headers = { 'accept': 'application/json' };
+    if (method !== 'GET' && method !== 'HEAD') {
+      const raw = await readBody(req);
+      body = raw || undefined;
+      if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+    }
+    const upstream = await fetch(targetUrl, { method, headers, body });
+    const text = await upstream.text();
+    res.writeHead(upstream.status, {
+      'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    res.end(text);
+  } catch (e) {
+    sendJson(res, 502, { ok:false, error:'Cloudflare API proxy failed', detail: e.message || String(e) });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
 
   if (pathname === '/api/top' && req.method === 'GET') {
-    return sendJson(res, 200, {
-      rows: getTop(url.searchParams.get('seed'), url.searchParams.get('mode'), url.searchParams.get('limit')),
-    });
+    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
   }
 
   if (pathname === '/api/ghost' && req.method === 'GET') {
-    return sendJson(res, 200, {
-      ghost: getGhost(url.searchParams.get('seed'), url.searchParams.get('mode')),
-    });
+    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
+  }
+
+  if (pathname === '/api/mebest' && req.method === 'GET') {
+    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
   }
 
   if (pathname === '/api/submit' && req.method === 'POST') {
-    try {
-      const raw = await readBody(req);
-      const body = JSON.parse(raw || '{}');
-      const row = submitRow(body);
-      return sendJson(res, 200, { ok: true, row });
-    } catch (e) {
-      return sendJson(res, 400, { ok: false, error: e.message || 'Bad request' });
-    }
+    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
   }
 
   if (pathname === '/robots.txt' && req.method === 'GET') {
@@ -331,7 +317,6 @@ wss.on('connection', (ws) => {
     score: 0,
     alive: false,
     extracted: false,
-    paused: false,
     color: roomColorFromId(id),
     lastSeen: Date.now(),
     spawn: { x: 0, y: 0 },
@@ -411,22 +396,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.type === 'pause_state') {
-      ws.player.paused = !!msg.paused;
-      if (ws.player.paused) {
-        ws.player.pvpInvulnUntil = Date.now() + 60 * 60 * 1000;
-      } else {
-        ws.player.pvpInvulnUntil = Date.now() + 1500;
-      }
-      return;
-    }
-
-    if (msg.type === 'resume_grace') {
-      ws.player.paused = false;
-      ws.player.pvpInvulnUntil = Date.now() + 1500;
-      return;
-    }
-
     if (msg.type === 'state') {
       ws.player.x = clamp(Number(msg.x) || 0, -1000000, 1000000);
       ws.player.y = clamp(Number(msg.y) || 0, -1000000, 1000000);
@@ -453,7 +422,7 @@ wss.on('connection', (ws) => {
 
 
 function processRoomPvp(room, now) {
-  const players = [...room.players.values()].filter(p => p.alive && !p.extracted && !p.paused);
+  const players = [...room.players.values()].filter(p => p.alive && !p.extracted);
 
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
@@ -546,8 +515,6 @@ setInterval(() => {
     broadcastRoom(room);
   }
 }, 1000 / 15);
-
-loadLeaderboards();
 
 server.listen(PORT, HOST, () => {
   console.log(`VoidRun network server: http://${HOST}:${PORT}`);
