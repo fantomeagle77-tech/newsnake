@@ -617,6 +617,12 @@
 
     async function toggleMusic() {
       await unlock();
+      const a = ambientAudio;
+      if (musicOn && (!a || a.paused)) {
+        if (musGain) musGain.gain.value = musVol;
+        await startMusic();
+        return true;
+      }
       musicOn = !musicOn;
       localStorage.setItem(LS_MUS, musicOn ? '1' : '0');
       if (musGain) musGain.gain.value = musicOn ? musVol : 0;
@@ -725,6 +731,7 @@
   const onlineGhostEl = document.getElementById('onlineGhost');
   const API_BASE = String(window.VOIDRUN_API_BASE || localStorage.getItem('voidrun_api_base') || (location.hostname === 'play.newsnake.win' ? 'https://newsnake-a8b.pages.dev' : '') || '').replace(/\/$/, '');
   const apiUrl = (path) => API_BASE ? (API_BASE + path) : path;
+  const TOP_PANEL_KEY = 'newsnake_top_panel_open';
   const onlineMyBestEl = document.getElementById('onlineMyBest');
   const onlineTopEl = document.getElementById('onlineTop');
   const onlinePanelEl = document.getElementById('onlinePanel');
@@ -976,6 +983,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       color: NET.color || '#79C8FF',
       r: Number(player.r || 18),
       score: Number(player.score || 0),
+      x: Number(player.x || 0),
+      y: Number(player.y || 0),
     });
     for (const p of NET.players.values()) {
       if (!p) continue;
@@ -987,6 +996,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         color: p.color || '#79C8FF',
         r: Number(p.r || 18),
         score: Number(p.score || 0),
+        x: Number(p.x || 0),
+        y: Number(p.y || 0),
       });
     }
     const uniq = new Map();
@@ -1416,8 +1427,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       const dy = p.y - player.y;
       const worldDist = Math.hypot(dx, dy);
 
-      const near = 1 - clamp(worldDist / 2600, 0, 1);
-      const alpha = 0.16 + near * 0.76;
+      const near = 1 - clamp(worldDist / 3200, 0, 1);
+      const alpha = 0.32 + near * 0.68;
       const rel = (player.r > p.r * eatF) ? 1 : (p.r > player.r * eatF ? -1 : 0);
       const baseColor = rel > 0
         ? 'rgba(110,255,170,1)'
@@ -1441,7 +1452,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       ctx.globalAlpha = alpha * 0.95;
       ctx.strokeStyle = 'rgba(0,0,0,0.78)';
       ctx.lineWidth = 5 * DPR;
-      ctx.font = `${Math.max(11 * DPR, (12 + near * 5) * DPR)}px system-ui,Segoe UI,Arial`;
+      ctx.font = `${Math.max(12 * DPR, (14 + near * 8) * DPR)}px system-ui,Segoe UI,Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.strokeText(nm, tx, ty);
@@ -1710,7 +1721,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         ? `room ${NET_ROOM} • seed ${SEED}`
         : `seed ${SEED}`;
     }
-    if (onlinePanelEl) onlinePanelEl.style.display = 'none';
+    if (onlinePanelEl) setTopPanelOpen(isTopPanelOpen());
     if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
     if (onlineMyBestEl) onlineMyBestEl.textContent = 'Личный рекорд: загрузка…';
 
@@ -2530,34 +2541,51 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
 
   AudioFX.autoUnlock();
 
-  bindTap(document.getElementById("btnSound"), async () => {
-    await AudioFX.unlock();
-    const on = AudioFX.toggleEnabled();
-    document.getElementById("btnSound").textContent = on ? "🔊" : "🔈";
-  });
-
-  bindTap(document.getElementById("btnMusic"), async () => {
-    const on = await AudioFX.toggleMusic();
-    document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
-  });
-
   const btnMusicEl = document.getElementById("btnMusic");
   const btnSoundEl = document.getElementById("btnSound");
 
-  if (btnMusicEl) {
-    const musOn = (localStorage.getItem('newsnake_mus') ?? '0') === '1';
-    btnMusicEl.style.opacity = musOn ? '1' : '0.55';
+  function syncAudioButtons() {
+    if (btnMusicEl) {
+      const musOn = (localStorage.getItem('newsnake_mus') ?? '0') === '1';
+      btnMusicEl.textContent = musOn ? '🎵' : '🔕';
+      btnMusicEl.style.opacity = musOn ? '1' : '0.72';
+      btnMusicEl.title = musOn ? 'Музыка: вкл' : 'Музыка: выкл';
+    }
+    if (btnSoundEl) {
+      const sfxOn = (localStorage.getItem('newsnake_sfx') ?? '1') === '1';
+      btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
+      btnSoundEl.style.opacity = sfxOn ? '1' : '0.72';
+      btnSoundEl.title = sfxOn ? 'Звук: вкл' : 'Звук: выкл';
+    }
   }
 
-  if (btnSoundEl) {
-    const sfxOn = (localStorage.getItem('newsnake_sfx') ?? '1') === '1';
-    btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
+  bindTap(document.getElementById("btnSound"), async () => {
+    await AudioFX.unlock();
+    AudioFX.toggleEnabled();
+    syncAudioButtons();
+  });
+
+  bindTap(document.getElementById("btnMusic"), async () => {
+    await AudioFX.toggleMusic();
+    syncAudioButtons();
+  });
+
+  syncAudioButtons();
+
+  function isTopPanelOpen() {
+    const saved = localStorage.getItem(TOP_PANEL_KEY);
+    return saved === null ? true : saved === '1';
   }
-	
+
+  function setTopPanelOpen(open) {
+    if (!onlinePanelEl) return;
+    onlinePanelEl.style.display = open ? 'block' : 'none';
+    localStorage.setItem(TOP_PANEL_KEY, open ? '1' : '0');
+  }
+
   function toggleTopPanel(){
     if (!onlinePanelEl) return;
-    const cur = onlinePanelEl.style.display;
-    onlinePanelEl.style.display = (cur === 'none' || cur === '') ? 'block' : 'none';
+    setTopPanelOpen(onlinePanelEl.style.display === 'none' || onlinePanelEl.style.display === '');
   }
 
   bindTap(document.getElementById("btnTop"), async () => {
