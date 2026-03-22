@@ -3,8 +3,17 @@ function clampInt(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
-function cleanName(v) {
-  return String(v || "anon").trim().slice(0, 18) || "anon";
+function corsHeaders() {
+  return {
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type",
+  };
+}
+
+export function onRequestOptions() {
+  return new Response(null, { status: 204, headers: corsHeaders() });
 }
 
 export async function onRequestPost({ env, request }) {
@@ -14,31 +23,31 @@ export async function onRequestPost({ env, request }) {
   } catch {
     return new Response(JSON.stringify({ error: "bad json" }), {
       status: 400,
-      headers: { "content-type": "application/json" },
+      headers: corsHeaders(),
     });
   }
 
-  const name = cleanName(body.name);
+  const name = String(body.name || "anon").trim().slice(0, 18);
   const seed = clampInt(parseInt(body.seed || 0, 10), 0, 999999999);
   const mode = String(body.mode || "score").slice(0, 16);
 
-  const score = clampInt(parseInt(body.score || 0, 10), 0, 2000000000);
-  const time_ms = clampInt(parseInt(body.time_ms || 0, 10), 0, 10000000000);
-  const coins = clampInt(parseInt(body.coins || 0, 10), 0, 2000000000);
+  const score = clampInt(parseInt(body.score || 0, 10), 0, 2_000_000_000);
+  const time_ms = clampInt(parseInt(body.time_ms || 0, 10), 0, 10_000_000_000);
+  const coins = clampInt(parseInt(body.coins || 0, 10), 0, 2_000_000_000);
   const version = String(body.version || "").slice(0, 24);
 
   const ghost = typeof body.ghost === "string" ? body.ghost : "";
   if (ghost.length > 60000) {
     return new Response(JSON.stringify({ error: "ghost too large" }), {
       status: 413,
-      headers: { "content-type": "application/json" },
+      headers: corsHeaders(),
     });
   }
 
   if (!seed) {
     return new Response(JSON.stringify({ error: "seed is required" }), {
       status: 400,
-      headers: { "content-type": "application/json" },
+      headers: corsHeaders(),
     });
   }
 
@@ -64,10 +73,7 @@ export async function onRequestPost({ env, request }) {
 
   await env.DB.batch([insertScore, upsertGhost]);
 
-  return new Response(JSON.stringify({
-    ok: true,
-    row: { name, seed, mode, score, time_ms, coins, version }
-  }), {
-    headers: { "content-type": "application/json" },
+  return new Response(JSON.stringify({ ok: true }), {
+    headers: corsHeaders(),
   });
 }

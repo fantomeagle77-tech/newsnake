@@ -1,3 +1,16 @@
+function corsHeaders() {
+  return {
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type",
+  };
+}
+
+export function onRequestOptions() {
+  return new Response(null, { status: 204, headers: corsHeaders() });
+}
+
 export async function onRequestGet({ env, request }) {
   const url = new URL(request.url);
 
@@ -8,28 +21,35 @@ export async function onRequestGet({ env, request }) {
   if (!seed) {
     return new Response(JSON.stringify({ error: "seed is required" }), {
       status: 400,
-      headers: { "content-type": "application/json" },
+      headers: corsHeaders(),
     });
   }
 
   const stmt = env.DB.prepare(
-    `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at
-     FROM scores s
-     WHERE s.seed = ? AND s.mode = ?
-       AND s.created_at = (
-         SELECT s2.created_at
-         FROM scores s2
-         WHERE s2.seed = s.seed AND s2.mode = s.mode AND LOWER(TRIM(s2.name)) = LOWER(TRIM(s.name))
-         ORDER BY s2.score DESC, s2.time_ms DESC, s2.coins DESC, s2.created_at DESC
-         LIMIT 1
-       )
-     ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, s.created_at DESC
+    `WITH ranked AS (
+       SELECT
+         name,
+         score,
+         time_ms,
+         coins,
+         created_at,
+         ROW_NUMBER() OVER (
+           PARTITION BY LOWER(TRIM(name))
+           ORDER BY score DESC, time_ms DESC, coins DESC, created_at DESC
+         ) AS rn
+       FROM scores
+       WHERE seed = ? AND mode = ?
+     )
+     SELECT name, score, time_ms, coins, created_at
+     FROM ranked
+     WHERE rn = 1
+     ORDER BY score DESC, time_ms DESC, coins DESC, created_at DESC
      LIMIT ?`
   ).bind(seed, mode, limit);
 
   const { results } = await stmt.all();
 
   return new Response(JSON.stringify({ seed, mode, rows: results || [] }), {
-    headers: { "content-type": "application/json" },
+    headers: corsHeaders(),
   });
 }

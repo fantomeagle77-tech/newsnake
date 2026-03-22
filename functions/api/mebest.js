@@ -1,3 +1,16 @@
+function corsHeaders() {
+  return {
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type",
+  };
+}
+
+export function onRequestOptions() {
+  return new Response(null, { status: 204, headers: corsHeaders() });
+}
+
 export async function onRequestGet({ env, request }) {
   const url = new URL(request.url);
 
@@ -8,7 +21,7 @@ export async function onRequestGet({ env, request }) {
   if (!seed) {
     return new Response(JSON.stringify({ error: "seed is required" }), {
       status: 400,
-      headers: { "content-type": "application/json" },
+      headers: corsHeaders(),
     });
   }
 
@@ -21,6 +34,6 @@ export async function onRequestGet({ env, request }) {
   ).bind(seed, mode, name).first();
 
   return new Response(JSON.stringify({ seed, mode, row: row || null }), {
-    headers: { "content-type": "application/json" },
+    headers: corsHeaders(),
   });
 }
