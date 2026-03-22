@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>БЕГ В ТЕМНОТЕ - Онлайн игра на выживание</title>
-  <meta name="description" content="БЕГ В ТЕМНОТЕ — онлайн игра арена в темноте на выживание с ростом шара, минами, реликвиями и эвакуацией." />
+  <title>Void Run — online survival arena</title>
+  <meta name="description" content="Void Run — тёмная онлайн survival arena с ростом шара, минами, реликвиями и экстракцией." />
   <meta name="robots" content="index,follow" />
-  <meta property="og:title" content="Онлайн игра, выживание, бесплатные онлайн игры, игры онлайн играть регистрации" />
-  <meta property="og:description" content="игры онлайн играть бесплатно, бесплатные онлайн игры, игры онлайн играть регистрации, игры без регистрации, гонки, игры на выживание, браузерные игры онлайн, игры, онлайн игры." />
+  <meta property="og:title" content="Void Run — online survival arena" />
+  <meta property="og:description" content="Grow, hunt, survive, extract." />
   <style>
     html, body { margin:0; padding:0; height:100%; background:#070A12; overflow:hidden; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     #wrap { position:fixed; inset:0; display:block; }
@@ -2019,6 +2019,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const chunkMap = new Map();     // key -> { coins:[], mines:[], t:tick }
   const collected = new Set();    // collected coin ids (key:index)
   let tickCounter = 0;
+  let foodShardSerial = 0;
 
   function chunkKey(cx, cy){ return cx + ',' + cy; }
 
@@ -2345,6 +2346,23 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
         r: 2.5 + Math.random()*3.5,
         hue
       });
+    }
+  }
+
+  function spawnFoodBurst(wx, wy, sourceR = 20, pieces = 6) {
+    const n = Math.max(3, Math.floor(pieces));
+    const burstR = Math.max(18, sourceR * 0.85);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU;
+      const d = Math.random() * burstR;
+      const x = wx + Math.cos(a) * d;
+      const y = wy + Math.sin(a) * d;
+      const cx = Math.floor(x / CHUNK);
+      const cy = Math.floor(y / CHUNK);
+      const ch = getChunk(cx, cy, level);
+      const r = clamp(6 + sourceR * 0.06 + Math.random() * 3.5, 6, 13);
+      const id = `burstfood:${tickCounter}:${foodShardSerial++}`;
+      ch.coins.push({ x, y, r, id });
     }
   }
 
@@ -3317,6 +3335,7 @@ if (ch.cells) {
         if (dist2(cc.x, cc.y, m.x, m.y) < hitR * hitR) {
           collected.add(cc.id);
           spawnBurst(cc.x, cc.y, cc.hue, 12, 210);
+          spawnFoodBurst(cc.x, cc.y, cc.r, clamp(Math.round(cc.r / 8), 4, 8));
           kickShake(4, 0.08);
           break;
         }
@@ -3518,6 +3537,7 @@ if (ch.hunters) {
           if (h.kind === 'charger' || h.r < 56) {
             collected.add(h.id);
             spawnBurst(h.x, h.y, h.hue || 120, 16, 260);
+            spawnFoodBurst(h.x, h.y, h.r, clamp(Math.round(h.r / 7), 5, 10));
           } else {
             const mdx = h.x - m.x;
             const mdy = h.y - m.y;
