@@ -413,6 +413,36 @@
 </div>
 
 
+<div id="signalBar" style="
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:12px; z-index:10007; display:flex; gap:8px; align-items:center;
+  padding:8px 10px; border-radius:18px;
+  background:rgba(8,12,24,.52); border:1px solid rgba(90,140,255,.16);
+  backdrop-filter: blur(10px); box-shadow:0 10px 30px rgba(0,0,0,.28);
+">
+  <button class="btn" id="sigHello" title="Быстрый сигнал: привет" style="padding:8px 12px; font-size:12px;">👋</button>
+  <button class="btn" id="sigWarn" title="Быстрый сигнал: опасность" style="padding:8px 12px; font-size:12px;">⚠️</button>
+  <button class="btn" id="sigPortal" title="Быстрый сигнал: портал" style="padding:8px 12px; font-size:12px;">🚪</button>
+  <button class="btn" id="sigHelp" title="Быстрый сигнал: нужна помощь" style="padding:8px 12px; font-size:12px;">🆘</button>
+</div>
+
+<div id="brandFooter" style="
+  position:fixed; right:16px; bottom:12px; z-index:10006;
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  max-width:min(92vw, 560px);
+  padding:8px 10px; border-radius:16px;
+  background:rgba(8,12,24,.46); border:1px solid rgba(90,140,255,.14);
+  color:#EAF1FF; backdrop-filter: blur(10px); box-shadow:0 10px 30px rgba(0,0,0,.24);
+  font-size:12px; line-height:1.3;
+">
+  <span style="font-weight:800;">Void Run™</span>
+  <span style="opacity:.72;">© 2026</span>
+  <span style="opacity:.58;">•</span>
+  <button class="btn" id="btnFooterSupport" title="Поддержать проект" style="padding:6px 10px; font-size:12px;">❤️ Поддержать</button>
+  <button class="btn" id="btnContact" title="Контакты и техподдержка" style="padding:6px 10px; font-size:12px;">✉ Контакт</button>
+  <button class="btn" id="btnBug" title="Сообщить о баге" style="padding:6px 10px; font-size:12px;">🐞 Баг</button>
+</div>
+
 <div id="mobileUi" aria-hidden="true">
   <div id="mobileJoyWrap">
     <div id="mobileJoyBase"></div>
@@ -805,6 +835,14 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const supportCloseEl = document.getElementById('supportClose');
   const btnFounder = document.getElementById('btnFounder');
   const btnDonate = document.getElementById('btnDonate');
+  const btnFooterSupport = document.getElementById('btnFooterSupport');
+  const btnContact = document.getElementById('btnContact');
+  const btnBug = document.getElementById('btnBug');
+  const signalBarEl = document.getElementById('signalBar');
+  const sigHelloEl = document.getElementById('sigHello');
+  const sigWarnEl = document.getElementById('sigWarn');
+  const sigPortalEl = document.getElementById('sigPortal');
+  const sigHelpEl = document.getElementById('sigHelp');
 
   const overlay = document.getElementById('overlay');
   const btnStart = document.getElementById('start');
@@ -895,7 +933,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   const SUPPORT_LINKS = {
     founder: localStorage.getItem('voidrun_founder_url') || '',
-    donate: localStorage.getItem('voidrun_donate_url') || ''
+    donate: localStorage.getItem('voidrun_donate_url') || '',
+    contact: localStorage.getItem('voidrun_contact_url') || '',
+    bug: localStorage.getItem('voidrun_bug_url') || ''
   };
 
   const NET = {
@@ -915,6 +955,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     globalRevealUntil: 0,
     revealConsumed: new Set(),
     ignoreDeathUntil: 0,
+    signals: [],
   };
 
   // ==========================
@@ -990,28 +1031,53 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }
   function openSupport(kind='founder') {
     if (!supportModalEl) return;
-    const url = kind === 'donate' ? SUPPORT_LINKS.donate : SUPPORT_LINKS.founder;
-    if (supportSubtitleEl) {
-      supportSubtitleEl.textContent = kind === 'donate'
-        ? 'Кнопка доната готова. Вставь свою реальную ссылку в SUPPORT_LINKS.donate.'
-        : 'Founder Pack готов. Вставь свою реальную ссылку в SUPPORT_LINKS.founder.';
-    }
+    const map = {
+      founder: {
+        url: SUPPORT_LINKS.founder,
+        title: 'Поддержать Void Run',
+        text: 'Founder Pack для поддержки проекта. Вставь свою реальную ссылку в SUPPORT_LINKS.founder.'
+      },
+      donate: {
+        url: SUPPORT_LINKS.donate,
+        title: 'Поддержать Void Run',
+        text: 'Донат на развитие проекта. Вставь свою реальную ссылку в SUPPORT_LINKS.donate.'
+      },
+      contact: {
+        url: SUPPORT_LINKS.contact,
+        title: 'Контакты / техподдержка',
+        text: 'Ссылка для связи с разработчиком и техподдержкой. Вставь её в SUPPORT_LINKS.contact.'
+      },
+      bug: {
+        url: SUPPORT_LINKS.bug,
+        title: 'Сообщить о баге',
+        text: 'Ссылка на багрепорт / форму обратной связи. Вставь её в SUPPORT_LINKS.bug.'
+      },
+    };
+    const conf = map[kind] || map.founder;
     supportModalEl.dataset.kind = kind;
+    const ttlEl = supportModalEl.querySelector('div[style*="font-size:26px"]');
+    if (ttlEl) ttlEl.textContent = conf.title;
+    if (supportSubtitleEl) supportSubtitleEl.textContent = conf.text;
     supportModalEl.style.display = 'flex';
-    if (supportGoEl) supportGoEl.textContent = url ? 'Открыть ссылку' : 'Ссылка не задана';
+    syncUiLayers();
+    if (supportGoEl) supportGoEl.textContent = conf.url ? 'Открыть' : 'Ссылка не задана';
   }
 
   function closeSupport() {
     if (supportModalEl) supportModalEl.style.display = 'none';
+    syncUiLayers();
   }
 
   function goSupport() {
-    const kind = supportModalEl?.dataset.kind === 'donate' ? 'donate' : 'founder';
-    const url = kind === 'donate' ? SUPPORT_LINKS.donate : SUPPORT_LINKS.founder;
+    const kind = String(supportModalEl?.dataset.kind || 'founder');
+    const url = SUPPORT_LINKS[kind] || '';
     if (!url) {
-      alert(kind === 'donate'
-        ? 'Вставь свою ссылку в SUPPORT_LINKS.donate'
-        : 'Вставь свою ссылку в SUPPORT_LINKS.founder');
+      alert(
+        kind === 'contact' ? 'Вставь свою ссылку в SUPPORT_LINKS.contact' :
+        kind === 'bug' ? 'Вставь свою ссылку в SUPPORT_LINKS.bug' :
+        kind === 'donate' ? 'Вставь свою ссылку в SUPPORT_LINKS.donate' :
+        'Вставь свою ссылку в SUPPORT_LINKS.founder'
+      );
       return;
     }
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -1028,6 +1094,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       color: NET.color || '#79C8FF',
       r: Number(player.r || 18),
       score: Number(player.score || 0),
+      x: Number(player.x || 0),
+      y: Number(player.y || 0),
     });
     for (const p of NET.players.values()) {
       if (!p) continue;
@@ -1039,6 +1107,8 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         color: p.color || '#79C8FF',
         r: Number(p.r || 18),
         score: Number(p.score || 0),
+        x: Number(p.x || 0),
+        y: Number(p.y || 0),
       });
     }
     const uniq = new Map();
@@ -1095,6 +1165,42 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (!NET_ENABLED) return;
     if (!NET.ws || NET.ws.readyState !== 1) return;
     NET.ws.send(JSON.stringify(obj));
+  }
+
+  function pushNetSignal(kind='hello', payload={}) {
+    const now = Date.now();
+    const item = {
+      kind,
+      name: String(payload.name || 'anon').slice(0,18),
+      id: String(payload.id || randomUUID?.() || Math.random()),
+      x: Number(payload.x || 0),
+      y: Number(payload.y || 0),
+      until: now + 3600,
+      color: payload.color || '#EAF1FF',
+      self: !!payload.self,
+    };
+    NET.signals.push(item);
+    if (NET.signals.length > 24) NET.signals.splice(0, NET.signals.length - 24);
+  }
+
+  function sendQuickSignal(kind='hello') {
+    if (!NET_ENABLED || !NET.connected) return;
+    const payload = {
+      type: 'signal',
+      room: NET.room,
+      kind,
+      x: player.x,
+      y: player.y,
+    };
+    netSend(payload);
+    pushNetSignal(kind, {
+      name: ONLINE.name || 'anon',
+      id: NET.id || 'self',
+      x: player.x,
+      y: player.y,
+      color: NET.color || '#79C8FF',
+      self: true,
+    });
   }
 
   function netHello(force = false) {
@@ -1218,6 +1324,18 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
           collected.add(id);
         }
         AudioFX.power?.();
+        return;
+      }
+
+      if (msg.type === 'signal') {
+        pushNetSignal(msg.kind || 'hello', {
+          name: msg.name || 'anon',
+          id: msg.id || '',
+          x: msg.x,
+          y: msg.y,
+          color: msg.color || '#EAF1FF',
+          self: msg.id === NET.id,
+        });
         return;
       }
 
@@ -1562,6 +1680,20 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       mobileUi.style.display = (isMobile && !activeModal) ? 'block' : 'none';
       mobileUi.style.pointerEvents = activeModal ? 'none' : '';
       mobileUi.setAttribute('aria-hidden', activeModal ? 'true' : 'false');
+
+      if (signalBarEl) {
+        signalBarEl.style.bottom = isMobile
+          ? 'calc(env(safe-area-inset-bottom, 0px) + 104px)'
+          : '12px';
+      }
+      const footerEl = document.getElementById('brandFooter');
+      if (footerEl) {
+        footerEl.style.bottom = isMobile
+          ? 'calc(env(safe-area-inset-bottom, 0px) + 60px)'
+          : '12px';
+        footerEl.style.right = isMobile ? '8px' : '16px';
+        footerEl.style.left = isMobile ? '8px' : 'auto';
+      }
     }
   }
 
@@ -2317,6 +2449,10 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
   const RELIC_GOAL = 3;
   const EXTRACT_MIN_SEC = 70; // прототип: можно поднять до 120+
   let portal = null; // {x,y,r}
+  const PORTAL_RELOCATE_MS = 45000;
+  const EXTRACT_SCORE_BONUS = 750;
+  const EXTRACT_COIN_BONUS = 12;
+  let portalRelocateAt = 0;
 
 
   // ==========================
@@ -2673,6 +2809,48 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     openSupport('donate');
   });
 
+  bindTap(btnFooterSupport, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openSupport('donate');
+  });
+
+  bindTap(btnContact, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openSupport('contact');
+  });
+
+  bindTap(btnBug, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openSupport('bug');
+  });
+
+  bindTap(sigHelloEl, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    sendQuickSignal('hello');
+  });
+
+  bindTap(sigWarnEl, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    sendQuickSignal('warn');
+  });
+
+  bindTap(sigPortalEl, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    sendQuickSignal('portal');
+  });
+
+  bindTap(sigHelpEl, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    sendQuickSignal('help');
+  });
+
   bindTap(onlineSaveBtn, async () => {
     await AudioFX.unlock();
     AudioFX.click();
@@ -2706,7 +2884,9 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     elMass.parentElement && (elMass.parentElement.title = 'Размер шара');
     elScore.parentElement && (elScore.parentElement.title = 'Очки: идут в лидеры');
     elRelics.parentElement && (elRelics.parentElement.title = 'Реликвии: 3/3 открывают портал');
-    elExtract.parentElement && (elExtract.parentElement.title = 'Выход / экстракция');
+    elExtract.parentElement && (elExtract.parentElement.title = portal
+      ? `Выход / экстракция • до портала ${Math.round(portalDistanceWorld())} • осталось ${Math.ceil(portalTimeLeftMs()/1000)}с`
+      : 'Выход / экстракция');
     elHP.parentElement && (elHP.parentElement.title = 'Очки здоровья');
     elShield.parentElement && (elShield.parentElement.title = 'Щит: 1 удар, осталось ' + Math.max(0, player.shieldTime || 0).toFixed(1) + 's');
     elLv.parentElement && (elLv.parentElement.title = 'Текущий уровень');
@@ -3160,6 +3340,10 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
       // Swarms + Boss updates (wow moments)
       updateBoss(dt);
       updateSwarms(dt);
+
+      if (portal && !player.extracted && performance.now() >= portalRelocateAt) {
+        spawnPortalNearPlayer();
+      }
 
       // World interactions near player
       stepWorld(dt);
@@ -4157,6 +4341,8 @@ if (ch.hunters) {
   drawPlayerOutline(px, py, player.r);
   drawNetLabelsOnTop(sx, sy);
   drawNetEdgeHints(sx, sy);
+  drawPortalEdgeHint(sx, sy);
+  drawSignalHints(sx, sy);
 }
 
   function drawBackground() {
@@ -4421,29 +4607,183 @@ function drawCoin(x,y,r) {
     updateHUD();
   }
 
+  function spawnPortalNearPlayer() {
+    const a = Math.random() * TAU;
+    const dist = 820 + Math.random()*260;
+    portal = { x: player.x + Math.cos(a)*dist, y: player.y + Math.sin(a)*dist, r: 46*DPR };
+    portalRelocateAt = performance.now() + PORTAL_RELOCATE_MS;
+    AudioFX.portal();
+  }
+
+  function portalTimeLeftMs() {
+    return portal ? Math.max(0, portalRelocateAt - performance.now()) : 0;
+  }
+
+  function portalDistanceWorld() {
+    if (!portal) return 0;
+    return Math.hypot(portal.x - player.x, portal.y - player.y);
+  }
+
+  function drawPortalEdgeHint(sx, sy) {
+    if (!portal || player.extracted) return;
+    const pad = 42 * DPR;
+    const cx = W / 2, cy = H / 2;
+    const x = sx(portal.x), y = sy(portal.y);
+    const onScreen = x >= pad && x <= W - pad && y >= pad && y <= H - pad;
+
+    const distTxt = `${Math.round(portalDistanceWorld())}`;
+    const secTxt = `${Math.ceil(portalTimeLeftMs()/1000)}s`;
+
+    if (onScreen) {
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      ctx.font = `${15 * DPR}px system-ui,Segoe UI,Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+      ctx.lineWidth = 5 * DPR;
+      const label = `🚪 ПОРТАЛ • ${distTxt} • ${secTxt}`;
+      ctx.strokeText(label, x, y - portal.r - 16 * DPR);
+      ctx.fillStyle = 'rgba(220,240,255,0.96)';
+      ctx.fillText(label, x, y - portal.r - 16 * DPR);
+      ctx.restore();
+      return;
+    }
+
+    const vx = x - cx;
+    const vy = y - cy;
+    if (!vx && !vy) return;
+    const kx = vx > 0 ? (W - pad - cx) / vx : (pad - cx) / vx;
+    const ky = vy > 0 ? (H - pad - cy) / vy : (pad - cy) / vy;
+    const k = Math.min(Math.abs(kx), Math.abs(ky));
+    if (!isFinite(k) || k <= 0) return;
+
+    const ex = cx + vx * k;
+    const ey = cy + vy * k;
+    const ang = Math.atan2(vy, vx);
+    const tx = ex - Math.cos(ang) * (18 * DPR);
+    const ty = ey - Math.sin(ang) * (18 * DPR);
+
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(140,220,255,0.24)';
+    ctx.beginPath(); ctx.arc(ex, ey, 15 * DPR, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(210,245,255,0.92)';
+    ctx.lineWidth = 3 * DPR;
+    ctx.beginPath(); ctx.arc(ex, ey, 14 * DPR, 0, TAU); ctx.stroke();
+    ctx.font = `${15 * DPR}px system-ui,Segoe UI,Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = `🚪 ПОРТАЛ ${distTxt} • ${secTxt}`;
+    ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+    ctx.lineWidth = 5 * DPR;
+    ctx.strokeText(label, tx, ty);
+    ctx.fillStyle = 'rgba(220,240,255,0.98)';
+    ctx.fillText(label, tx, ty);
+    ctx.restore();
+  }
+
+  function drawSignalHints(sx, sy) {
+    const now = Date.now();
+    NET.signals = NET.signals.filter(s => s.until > now);
+    if (!NET.signals.length) return;
+
+    const pad = 54 * DPR;
+    const cx = W / 2, cy = H / 2;
+    const kindMeta = {
+      hello: ['👋','rgba(180,220,255,1)'],
+      warn: ['⚠️','rgba(255,180,110,1)'],
+      portal: ['🚪','rgba(190,230,255,1)'],
+      help: ['🆘','rgba(255,120,145,1)'],
+    };
+
+    // toasts
+    let tyStack = 86 * DPR;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (const s of NET.signals.slice(-3).reverse()) {
+      const [ico, color] = kindMeta[s.kind] || ['💬', 'rgba(230,235,255,1)'];
+      const alpha = clamp((s.until - now) / 3600, 0, 1);
+      const txt = `${ico} ${String(s.name || 'anon').slice(0,18)}`;
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.fillStyle = 'rgba(8,12,24,0.72)';
+      const w = Math.max(180 * DPR, ctx.measureText(txt).width + 26 * DPR);
+      ctx.beginPath();
+      ctx.roundRect?.(cx - w/2, tyStack, w, 26 * DPR, 12 * DPR);
+      if (ctx.roundRect) ctx.fill();
+      else ctx.fillRect(cx - w/2, tyStack, w, 26*DPR);
+      ctx.font = `${13 * DPR}px system-ui,Segoe UI,Arial`;
+      ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+      ctx.lineWidth = 4 * DPR;
+      ctx.strokeText(txt, cx, tyStack + 6 * DPR);
+      ctx.fillStyle = color;
+      ctx.fillText(txt, cx, tyStack + 6 * DPR);
+      tyStack += 30 * DPR;
+    }
+    ctx.restore();
+
+    // edge markers for fresh signals
+    for (const s of NET.signals) {
+      if (!isFinite(s.x) || !isFinite(s.y)) continue;
+      const x = sx(s.x), y = sy(s.y);
+      const onScreen = x >= pad && x <= W - pad && y >= pad && y <= H - pad;
+      const [ico, color] = kindMeta[s.kind] || ['💬', 'rgba(230,235,255,1)'];
+      const alpha = clamp((s.until - now) / 3600, 0, 1);
+
+      if (onScreen) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = `${14 * DPR}px system-ui,Segoe UI,Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const label = `${ico} ${String(s.name || 'anon').slice(0,18)}`;
+        ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+        ctx.lineWidth = 5 * DPR;
+        ctx.strokeText(label, x, y - 14 * DPR);
+        ctx.fillStyle = color;
+        ctx.fillText(label, x, y - 14 * DPR);
+        ctx.restore();
+        continue;
+      }
+
+      const vx = x - cx, vy = y - cy;
+      if (!vx && !vy) continue;
+      const kx = vx > 0 ? (W - pad - cx) / vx : (pad - cx) / vx;
+      const ky = vy > 0 ? (H - pad - cy) / vy : (pad - cy) / vy;
+      const k = Math.min(Math.abs(kx), Math.abs(ky));
+      if (!isFinite(k) || k <= 0) continue;
+      const ex = cx + vx * k, ey = cy + vy * k;
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(ex, ey, 9 * DPR, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+  }
+
   function maybeSpawnPortal() {
     if (portal) return;
     if (player.relics.length < RELIC_GOAL) return;
     if (timeSurv < EXTRACT_MIN_SEC) return;
-    // spawn ~900px away from player, random direction
-    const a = Math.random() * TAU;
-    const dist = 820 + Math.random()*260;
-    portal = { x: player.x + Math.cos(a)*dist, y: player.y + Math.sin(a)*dist, r: 46*DPR };
-    AudioFX.portal();
+    spawnPortalNearPlayer();
   }
 
   function tryExtract() {
     if (!portal || player.extracted) return false;
     const rr = player.r + portal.r;
     if (dist2(player.x, player.y, portal.x, portal.y) < rr*rr) {
+      const extractBonus = EXTRACT_SCORE_BONUS + Math.round(timeSurv * 2) + player.relics.length * 120;
+      player.score += extractBonus;
+      player.coins += EXTRACT_COIN_BONUS;
       player.extracted = true;
       state = 'DEAD';
       overlay.style.display = 'flex';
-    syncUiLayers();
+      syncUiLayers();
       overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
       overlay.querySelectorAll('p')[0].innerHTML = `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
-      overlay.querySelectorAll('p')[1].innerHTML = `Успешный выход из экспедиции. Результат отправлен в таблицу лидеров.`;
-      overlay.querySelectorAll('p')[2].innerHTML = `Нажми <b>Заново</b>, чтобы начать новый забег.`;
+      overlay.querySelectorAll('p')[1].innerHTML = `Экстракционный бонус: <b>+${extractBonus}</b> очков и <b>+${EXTRACT_COIN_BONUS}</b> монет. Результат отправлен в таблицу лидеров.`;
+      overlay.querySelectorAll('p')[2].innerHTML = `Победа отмечена как <b>✅ экстракция</b>. Нажми <b>Заново</b>, чтобы начать новый забег.`;
       btnStart.textContent = 'Заново';
       onlineSubmitResult(true).then(()=>onlineRefresh());
       return true;
