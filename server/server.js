@@ -408,6 +408,26 @@ wss.on('connection', (ws) => {
       }
       return;
     }
+
+    if (msg.type === 'signal') {
+      const room = rooms.get(ws.player.room);
+      if (!room) return;
+      const kind = String(msg.kind || 'hello').slice(0, 16);
+      const payload = {
+        type: 'signal',
+        id: ws.player.id,
+        name: ws.player.name,
+        color: ws.player.color,
+        kind,
+        x: clamp(Number(msg.x) || 0, -1000000, 1000000),
+        y: clamp(Number(msg.y) || 0, -1000000, 1000000),
+        ts: Date.now(),
+      };
+      for (const p of room.players.values()) {
+        directSend(p.ws, payload);
+      }
+      return;
+    }
   });
 
   ws.on('close', () => {
