@@ -414,33 +414,30 @@
 
 
 <div id="signalBar" style="
-  position:fixed; left:50%; transform:translateX(-50%);
-  bottom:12px; z-index:10007; display:flex; gap:8px; align-items:center;
-  padding:8px 10px; border-radius:18px;
+  position:fixed; right:16px; top:86px; z-index:9990;
+  display:flex; gap:8px; align-items:center; justify-content:space-between;
+  width:280px; box-sizing:border-box;
+  padding:8px 10px; border-radius:16px;
   background:rgba(8,12,24,.52); border:1px solid rgba(90,140,255,.16);
   backdrop-filter: blur(10px); box-shadow:0 10px 30px rgba(0,0,0,.28);
 ">
-  <button class="btn" id="sigHello" title="Быстрый сигнал: привет" style="padding:8px 12px; font-size:12px;">👋</button>
-  <button class="btn" id="sigWarn" title="Быстрый сигнал: опасность" style="padding:8px 12px; font-size:12px;">⚠️</button>
-  <button class="btn" id="sigPortal" title="Быстрый сигнал: портал" style="padding:8px 12px; font-size:12px;">🚪</button>
-  <button class="btn" id="sigHelp" title="Быстрый сигнал: нужна помощь" style="padding:8px 12px; font-size:12px;">🆘</button>
+  <button class="btn" id="sigHello" title="Быстрый сигнал: привет" style="padding:8px 0; font-size:16px; min-width:0; flex:1;">👋</button>
+  <button class="btn" id="sigWarn" title="Быстрый сигнал: опасность" style="padding:8px 0; font-size:16px; min-width:0; flex:1;">⚠️</button>
+  <button class="btn" id="sigPortal" title="Быстрый сигнал: портал" style="padding:8px 0; font-size:16px; min-width:0; flex:1;">🚪</button>
+  <button class="btn" id="sigHelp" title="Быстрый сигнал: нужна помощь" style="padding:8px 0; font-size:16px; min-width:0; flex:1;">🆘</button>
 </div>
 
 <div id="brandFooter" style="
   position:fixed; right:16px; bottom:12px; z-index:10006;
-  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-  max-width:min(92vw, 560px);
-  padding:8px 10px; border-radius:16px;
-  background:rgba(8,12,24,.46); border:1px solid rgba(90,140,255,.14);
+  display:flex; gap:6px; align-items:center;
+  padding:6px 8px; border-radius:14px;
+  background:rgba(8,12,24,.42); border:1px solid rgba(90,140,255,.14);
   color:#EAF1FF; backdrop-filter: blur(10px); box-shadow:0 10px 30px rgba(0,0,0,.24);
-  font-size:12px; line-height:1.3;
+  font-size:11px; line-height:1.2;
 ">
-  <span style="font-weight:800;">Void Run™</span>
-  <span style="opacity:.72;">© 2026</span>
-  <span style="opacity:.58;">•</span>
-  <button class="btn" id="btnFooterSupport" title="Поддержать проект" style="padding:6px 10px; font-size:12px;">❤️ Поддержать</button>
-  <button class="btn" id="btnContact" title="Контакты и техподдержка" style="padding:6px 10px; font-size:12px;">✉ Контакт</button>
-  <button class="btn" id="btnBug" title="Сообщить о баге" style="padding:6px 10px; font-size:12px;">🐞 Баг</button>
+  <span id="brandFooterText" style="font-weight:800; opacity:.82;">Void Run™ © 2026</span>
+  <button class="btn" id="btnContact" title="Контакты и техподдержка" style="padding:6px 10px; font-size:12px;">✉</button>
+  <button class="btn" id="btnBug" title="Сообщить о баге" style="padding:6px 10px; font-size:12px;">🐞</button>
 </div>
 
 <div id="mobileUi" aria-hidden="true">
@@ -1681,19 +1678,31 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       mobileUi.style.pointerEvents = activeModal ? 'none' : '';
       mobileUi.setAttribute('aria-hidden', activeModal ? 'true' : 'false');
 
+      const onlineOpen = !!(onlinePanelEl && onlinePanelEl.style.display !== 'none');
       if (signalBarEl) {
-        signalBarEl.style.bottom = isMobile
-          ? 'calc(env(safe-area-inset-bottom, 0px) + 104px)'
-          : '12px';
+        signalBarEl.style.display = (isMobile && onlineOpen) ? 'none' : 'flex';
+        signalBarEl.style.right = isMobile ? '8px' : '16px';
+        signalBarEl.style.left = 'auto';
+        signalBarEl.style.transform = 'none';
+        signalBarEl.style.top = isMobile ? 'auto' : '86px';
+        signalBarEl.style.bottom = isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 86px)' : 'auto';
+        signalBarEl.style.width = isMobile ? 'auto' : '280px';
+        signalBarEl.style.padding = isMobile ? '6px 8px' : '8px 10px';
+        signalBarEl.style.gap = isMobile ? '6px' : '8px';
       }
       const footerEl = document.getElementById('brandFooter');
+      const footerTextEl = document.getElementById('brandFooterText');
       if (footerEl) {
+        footerEl.style.display = (isMobile && onlineOpen) ? 'none' : 'flex';
         footerEl.style.bottom = isMobile
-          ? 'calc(env(safe-area-inset-bottom, 0px) + 60px)'
+          ? 'calc(env(safe-area-inset-bottom, 0px) + 24px)'
           : '12px';
         footerEl.style.right = isMobile ? '8px' : '16px';
-        footerEl.style.left = isMobile ? '8px' : 'auto';
+        footerEl.style.left = 'auto';
+        footerEl.style.padding = isMobile ? '5px 6px' : '6px 8px';
+        footerEl.style.gap = isMobile ? '5px' : '6px';
       }
+      if (footerTextEl) footerTextEl.style.display = isMobile ? 'none' : 'inline';
     }
   }
 
