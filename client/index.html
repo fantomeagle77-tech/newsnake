@@ -273,7 +273,9 @@
     <div class="pill" title="Текущий уровень сложности"><span>Lv <span class="k">Уровень</span></span> <b id="lv">1</b></div>
     <div class="pill" title="Лучшее время выживания на этом устройстве"><span>🏆 <span class="k">Лучшее</span></span> <b id="best">0.0s</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
+	<button class="btn" id="btnPrevTrack" title="Предыдущий трек">⏮</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
+	<button class="btn" id="btnNextTrack" title="Следующий трек">⏭</button>
 	<button class="btn" id="btnTop"   title="Лидеры">🏆</button>
 	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
 	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
@@ -452,7 +454,7 @@
     let ctx = null;
     let master = null, sfxGain = null, musGain = null;
     let enabled = (localStorage.getItem(LS_SFX) ?? '1') === '1';
-    let musicOn = (localStorage.getItem(LS_MUS) ?? '0') === '1'; // default OFF (важно)
+    let musicOn = (localStorage.getItem(LS_MUS) ?? '1') === '1'; // default OFF (важно)
     let sfxVol = parseFloat(localStorage.getItem(LS_SFXV) ?? '0.65');
     let musVol = parseFloat(localStorage.getItem(LS_MUSV) ?? '0.24');
 
@@ -461,6 +463,7 @@
     let ambientAudio = null;
     let ambientTrackIndex = -1;
     let ambientFadeTimer = null;
+	let ambientManualIndex = null;
 
     const AMBIENT_TRACKS = [
       'audio/ambient_01.ogg',
@@ -488,12 +491,22 @@
     }
 
     async function unlock() {
-      ensure();
-      if (ctx.state !== 'running') {
-        try { await ctx.resume(); } catch(e) {}
-      }
-      return true;
-    }
+	  ensure();
+	  if (ctx.state !== 'running') {
+	    try { await ctx.resume(); } catch(e) {}
+	  }
+	
+	  if (musicOn) {
+	    try {
+	      const a = ensureAmbientAudio();
+	      if (!a.src || a.paused) {
+	        await startMusic();
+	      }
+	    } catch (e) {}
+	  }
+	
+	  return true;
+	}
 
     function autoUnlock() {
       const once = async () => {
@@ -532,9 +545,12 @@
     }
 
     function chooseAmbientTrackIndex() {
-      const seed = (typeof dailySeedUTC === 'function' ? dailySeedUTC() : Date.now()) >>> 0;
-      return AMBIENT_TRACKS.length ? (seed % AMBIENT_TRACKS.length) : 0;
-    }
+	  if (ambientManualIndex != null && AMBIENT_TRACKS.length) {
+	    return ((ambientManualIndex % AMBIENT_TRACKS.length) + AMBIENT_TRACKS.length) % AMBIENT_TRACKS.length;
+	  }
+	  const seed = (typeof dailySeedUTC === 'function' ? dailySeedUTC() : Date.now()) >>> 0;
+	  return AMBIENT_TRACKS.length ? (seed % AMBIENT_TRACKS.length) : 0;
+	}
 
     function ensureAmbientAudio() {
       if (ambientAudio) return ambientAudio;
@@ -615,6 +631,40 @@
       }
     }
 
+	async function setAmbientTrackByIndex(nextIdx) {
+	  if (!AMBIENT_TRACKS.length) return -1;
+	  await unlock();
+	
+	  ambientManualIndex = ((nextIdx % AMBIENT_TRACKS.length) + AMBIENT_TRACKS.length) % AMBIENT_TRACKS.length;
+	
+	  const a = ensureAmbientAudio();
+	  stopMusic();
+	
+	  ambientTrackIndex = ambientManualIndex;
+	  a.src = AMBIENT_TRACKS[ambientTrackIndex];
+	  a.currentTime = 0;
+	  a.volume = 0;
+	
+	  if (musicOn) {
+	    try {
+	      await a.play();
+	      fadeAmbientTo(musVol, 500);
+	    } catch (e) {}
+	  }
+	
+	  return ambientTrackIndex;
+	}
+	
+	async function nextTrack() {
+	  const base = ambientTrackIndex >= 0 ? ambientTrackIndex : chooseAmbientTrackIndex();
+	  return setAmbientTrackByIndex(base + 1);
+	}
+	
+	async function prevTrack() {
+	  const base = ambientTrackIndex >= 0 ? ambientTrackIndex : chooseAmbientTrackIndex();
+	  return setAmbientTrackByIndex(base - 1);
+	}
+	  
     async function toggleMusic() {
       await unlock();
       musicOn = !musicOn;
@@ -663,8 +713,10 @@
     // SFX набор
     const api = {
       unlock, autoUnlock,
-      toggleEnabled, toggleMusic,
-      setSfxVol, setMusicVol,
+	  toggleEnabled, toggleMusic,
+	  setSfxVol, setMusicVol,
+	  nextTrack, prevTrack,
+	  isMusicOn: () => musicOn,
       click: ()=>beep(560,0.06,'sine',0.7,1.0),
       coin: ()=>beep(880,0.08,'triangle',0.9,1.12),
       hit: ()=>noiseBurst(0.10,0.8),
@@ -2536,10 +2588,30 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     document.getElementById("btnSound").textContent = on ? "🔊" : "🔈";
   });
 
-  bindTap(document.getElementById("btnMusic"), async () => {
-    const on = await AudioFX.toggleMusic();
-    document.getElementById("btnMusic").style.opacity = on ? "1" : "0.55";
-  });
+  function syncMusicBtn() {
+    const btn = document.getElementById("btnMusic");
+    if (!btn) return;
+    const on = AudioFX.isMusicOn();
+    btn.textContent = on ? "🎵" : "🔇";
+    btn.style.opacity = on ? "1" : "0.55";
+  }
+
+  document.getElementById("btnMusic").onclick = async () => {
+    await AudioFX.toggleMusic();
+    syncMusicBtn();
+  };
+
+  document.getElementById("btnPrevTrack").onclick = async () => {
+    await AudioFX.prevTrack();
+    syncMusicBtn();
+  };
+
+  document.getElementById("btnNextTrack").onclick = async () => {
+    await AudioFX.nextTrack();
+    syncMusicBtn();
+  };
+
+  syncMusicBtn();
 
   const btnMusicEl = document.getElementById("btnMusic");
   const btnSoundEl = document.getElementById("btnSound");
