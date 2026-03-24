@@ -323,7 +323,7 @@
   display:none;
 ">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-    <div style="font-weight:800;">🌐 TOP 20 дня</div>
+    <div style="font-weight:800;">🌐 TOP 20</div>
     <div id="onlineSeed" style="opacity:.75; font-size:12px;"></div>
   </div>
 
@@ -338,7 +338,7 @@
   </div>
 
   <div id="onlineGhost" style="margin-top:10px; font-size:12px; opacity:.85;">
-    Призрак дня: загрузка…
+    Лидер топа: загрузка…
   </div>
 
   <div id="onlineMyBest" style="margin-top:8px; font-size:12px; opacity:.86;">
@@ -348,7 +348,7 @@
   <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:260px; overflow:auto;"></ol>
 
   <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Лучшие результаты по никам хранятся в D1 и доступны после перезагрузки.
+    Глобальный TOP 20 и личные рекорды хранятся в D1 и доступны после перезагрузки.
   </div>
 </div>
 
@@ -1900,11 +1900,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   function onlineInitUI() {
     if (onlineSeedEl) {
       onlineSeedEl.textContent = NET_ENABLED
-        ? `room ${NET_ROOM} • seed ${SEED}`
-        : `seed ${SEED}`;
+        ? `room ${NET_ROOM} • all-time`
+        : `all-time`;
     }
     if (onlinePanelEl) onlinePanelEl.style.display = 'none';
-    if (onlineGhostEl) onlineGhostEl.textContent = 'Призрак дня: загрузка…';
+    if (onlineGhostEl) onlineGhostEl.textContent = 'Лидер топа: загрузка…';
     if (onlineMyBestEl) onlineMyBestEl.textContent = 'Личный рекорд: загрузка…';
 
     syncNickInputs();
@@ -1973,13 +1973,13 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   function onlineRenderTop() {
     if (!onlineTopEl) return;
     onlineTopEl.innerHTML = '';
-    for (const row of ONLINE.top) {
+    ONLINE.top.forEach((row, i) => {
       const li = document.createElement('li');
       li.style.margin = '0 0 10px 0';
       li.style.lineHeight = '1.45';
-      li.innerHTML = `<b>${row.name || 'anon'}</b><br><span style="opacity:.78">${formatRunLine(row)}</span>`;
+      li.innerHTML = `<b>${i + 1}. ${row.name || 'anon'}</b><br><span style="opacity:.78">${formatRunLine(row)}</span>`;
       onlineTopEl.appendChild(li);
-    }
+    });
     if (!ONLINE.top.length) {
       const li = document.createElement('li');
       li.style.opacity = '0.7';
@@ -1990,13 +1990,15 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
   function onlineRenderGhostLabel() {
     if (!onlineGhostEl) return;
-    if (!ONLINE.ghost) { onlineGhostEl.textContent = 'Призрак дня: нет данных'; return; }
-    onlineGhostEl.textContent = `Призрак дня: ${ONLINE.ghost.name} • очки ${Number(ONLINE.ghost.score||0)} • время ${((Number(ONLINE.ghost.time_ms||0))/1000).toFixed(1)}s`;
+    const leader = (ONLINE.top && ONLINE.top.length) ? ONLINE.top[0] : null;
+    const row = leader || ONLINE.ghost || null;
+    if (!row) { onlineGhostEl.textContent = 'Лидер топа: нет данных'; return; }
+    onlineGhostEl.textContent = `Лидер топа: ${row.name || 'anon'} • очки ${Number(row.score||0)} • время ${((Number(row.time_ms||0))/1000).toFixed(1)}s`;
   }
 
   async function onlineRefresh() {
     try {
-      const topRes = await fetch(apiUrl(`/api/top?seed=${SEED}&mode=${MODE}&limit=20`), { cache:'no-store' });
+      const topRes = await fetch(apiUrl(`/api/top?mode=${MODE}&limit=20&scope=all`), { cache:'no-store' });
       const topJson = await topRes.json();
       ONLINE.top = topJson.rows || topJson.top || [];
       onlineRenderTop();
@@ -2008,7 +2010,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       );
       let myBest = null;
       try {
-        const meRes = await fetch(apiUrl(`/api/mebest?seed=${SEED}&mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}`), { cache:'no-store' });
+        const meRes = await fetch(apiUrl(`/api/mebest?mode=${MODE}&name=${encodeURIComponent(ONLINE.name || 'anon')}&scope=all`), { cache:'no-store' });
         if (meRes.ok) {
           const meJson = await meRes.json();
           myBest = meJson.row || meJson.best || null;
