@@ -27,11 +27,15 @@ function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
-function sendJson(res, code, data) {
+function sendJson(res, code, data, extraHeaders = {}) {
   const body = JSON.stringify(data);
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    ...extraHeaders,
   });
   res.end(body);
 }
@@ -77,7 +81,41 @@ function submitRow(raw) {
   return row;
 }
 
-function getTop(seed, mode, limit = 10) {
+
+function bestRowByRules(a, b) {
+  if (!b) return a;
+  if ((a.score | 0) !== (b.score | 0)) return (a.score | 0) > (b.score | 0) ? a : b;
+  if ((a.time_ms | 0) !== (b.time_ms | 0)) return (a.time_ms | 0) > (b.time_ms | 0) ? a : b;
+  if ((a.coins | 0) !== (b.coins | 0)) return (a.coins | 0) > (b.coins | 0) ? a : b;
+  if ((a.extracted | 0) !== (b.extracted | 0)) return (a.extracted | 0) > (b.extracted | 0) ? a : b;
+  return (a.created_at | 0) > (b.created_at | 0) ? a : b;
+}
+
+function getAllRowsForMode(mode) {
+  const out = [];
+  for (const [key, rows] of leaderboards.entries()) {
+    const parts = String(key).split('::');
+    const rowMode = parts[1] || 'score';
+    if (rowMode === String(mode || 'score')) out.push(...rows);
+  }
+  return out;
+}
+
+function dedupeBestRows(rows) {
+  const best = new Map();
+  for (const row of rows) {
+    const clean = sanitizeName(row.name);
+    const prev = best.get(clean);
+    best.set(clean, bestRowByRules(row, prev));
+  }
+  return sortRows(Array.from(best.values()));
+}
+
+function getTop(seed, mode, limit = 10, scope = 'seed') {
+  if (scope === 'all') {
+    const rows = dedupeBestRows(getAllRowsForMode(mode));
+    return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
+  }
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
   return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
 }
@@ -87,10 +125,15 @@ function getGhost(seed, mode) {
   return rows.find(r => r.ghost) || rows[0] || null;
 }
 
-function getPersonalBest(seed, mode, name) {
-  const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
+function getPersonalBest(seed, mode, name, scope = 'seed') {
   const clean = sanitizeName(name);
-  return rows.find(r => sanitizeName(r.name) === clean) || null;
+  if (scope === 'all') {
+    const rows = dedupeBestRows(getAllRowsForMode(mode));
+    return rows.find(r => sanitizeName(r.name) === clean) || null;
+  }
+  const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
+  const mine = rows.filter(r => sanitizeName(r.name) === clean);
+  return mine.length ? dedupeBestRows(mine)[0] : null;
 }
 
 function getRoom(name) {
@@ -177,13 +220,7 @@ function serveStatic(req, res, pathname) {
 
     const ext = path.extname(filePath).toLowerCase();
     const type = MIME[ext] || 'application/octet-stream';
-    const headers = { 'content-type': type };
-    if (ext === '.html' || ext === '.js' || ext === '.json') {
-      headers['cache-control'] = 'no-store, no-cache, must-revalidate';
-      headers['pragma'] = 'no-cache';
-      headers['expires'] = '0';
-    }
-    res.writeHead(200, headers);
+    res.writeHead(200, { 'content-type': type });
     res.end(data);
   });
 }
@@ -229,47 +266,38 @@ function broadcastRoom(room) {
   }
 }
 
-
-async function proxyCloudflareApi(req, res, targetUrl) {
-  try {
-    const method = req.method || 'GET';
-    let body = undefined;
-    const headers = { 'accept': 'application/json' };
-    if (method !== 'GET' && method !== 'HEAD') {
-      const raw = await readBody(req);
-      body = raw || undefined;
-      if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
-    }
-    const upstream = await fetch(targetUrl, { method, headers, body });
-    const text = await upstream.text();
-    res.writeHead(upstream.status, {
-      'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-    });
-    res.end(text);
-  } catch (e) {
-    sendJson(res, 502, { ok:false, error:'Cloudflare API proxy failed', detail: e.message || String(e) });
-  }
-}
-
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
 
+  if (req.method === 'OPTIONS') return sendJson(res, 200, { ok: true });
+
   if (pathname === '/api/top' && req.method === 'GET') {
-    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
+    return sendJson(res, 200, {
+      rows: getTop(
+        url.searchParams.get('seed'),
+        url.searchParams.get('mode'),
+        url.searchParams.get('limit'),
+        url.searchParams.get('scope') || 'seed'
+      ),
+    });
   }
 
   if (pathname === '/api/ghost' && req.method === 'GET') {
-    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
-  }
-
-  if (pathname === '/api/mebest' && req.method === 'GET') {
-    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
+    return sendJson(res, 200, {
+      ghost: getGhost(url.searchParams.get('seed'), url.searchParams.get('mode')),
+    });
   }
 
   if (pathname === '/api/submit' && req.method === 'POST') {
-    return proxyCloudflareApi(req, res, `https://newsnake-a8b.pages.dev${url.pathname}${url.search}`);
+    try {
+      const raw = await readBody(req);
+      const body = JSON.parse(raw || '{}');
+      const row = submitRow(body);
+      return sendJson(res, 200, { ok: true, row });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message || 'Bad request' });
+    }
   }
 
   if (pathname === '/robots.txt' && req.method === 'GET') {
@@ -405,26 +433,6 @@ wss.on('connection', (ws) => {
       if (!ws.player.respawnAt) {
         ws.player.alive = !!msg.alive;
         ws.player.extracted = !!msg.extracted;
-      }
-      return;
-    }
-
-    if (msg.type === 'signal') {
-      const room = rooms.get(ws.player.room);
-      if (!room) return;
-      const kind = String(msg.kind || 'hello').slice(0, 16);
-      const payload = {
-        type: 'signal',
-        id: ws.player.id,
-        name: ws.player.name,
-        color: ws.player.color,
-        kind,
-        x: clamp(Number(msg.x) || 0, -1000000, 1000000),
-        y: clamp(Number(msg.y) || 0, -1000000, 1000000),
-        ts: Date.now(),
-      };
-      for (const p of room.players.values()) {
-        directSend(p.ws, payload);
       }
       return;
     }
