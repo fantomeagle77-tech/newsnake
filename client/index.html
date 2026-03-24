@@ -2250,6 +2250,12 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (biome === 'toxic')  { nM += 1; }
     if (biome === 'ice')    { nC += 1; }
 
+    const growthRatio = clamp(((typeof player !== 'undefined' && player && player.baseR) ? (player.r / player.baseR) : 1), 1, 12);
+    if (growthRatio >= 4.0) {
+      const soften = clamp((growthRatio - 4.0) / 4.0, 0, 1);
+      nM = Math.max(2, Math.round(nM * lerp(0.92, 0.62, soften)));
+    }
+
     
     // slime puddles (sticky zone) in toxic biome
     if (biome === 'toxic' && rnd() < 0.75) {
@@ -2276,10 +2282,14 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     for (let i=0;i<nM;i++){
       const x = baseX + rnd()*CHUNK;
       const y = baseY + rnd()*CHUNK;
-      const r = 22 + rnd()*10;
+      const baseMineR = 22 + rnd()*10;
       const phase = rnd()*TAU;
       const drift = 0.25 + rnd()*0.85;
-      const kind = (level >= 10 && biome === 'lava' && rnd() < 0.18) ? 'seeker' : 'wobble';
+      const heavyChance = growthRatio >= 4.2 ? clamp(0.06 + (growthRatio - 4.2) * 0.035, 0.06, 0.18) : 0;
+      let kind = 'wobble';
+      if (growthRatio >= 4.2 && rnd() < heavyChance) kind = 'heavy';
+      else if (level >= 10 && biome === 'lava' && rnd() < 0.18) kind = 'seeker';
+      const r = (kind === 'heavy') ? (34 + rnd()*14) : baseMineR;
       mines.push({id: key + ':m:' + i, x,y,r,phase,drift,kind,seekCd:rnd()*2,seekT:0});
     }
 
@@ -3214,26 +3224,76 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     }
   }
 
-  function crushMine(mx, my, mineR = 0) {
+  function crushMine(mx, my, mineR = 0, mineKind = 'wobble') {
+    const sizeRatio = player.r / player.baseR;
+    const isHeavy = mineKind === 'heavy';
+    const isSeeker = mineKind === 'seeker';
+
     if (player.shieldHits > 0) {
       player.shieldHits = Math.max(0, player.shieldHits - 1);
-      player.shieldTime = 0;
+      player.shieldTime = Math.max(0, player.shieldTime - (isHeavy ? 8.0 : (isSeeker ? 4.0 : 1.5)));
     } else {
-      const sizeRatio = player.r / player.baseR;
-      const coinLoss = clamp(Math.round(player.coins * 0.05 + sizeRatio * 2), 2, 22);
-      player.coins = Math.max(0, player.coins - coinLoss);
-      player.score = Math.max(0, player.score - Math.round(coinLoss * 1.5));
-      loseTailSegments(90 + coinLoss * 6);
+      let coinLoss = 0;
+      let tailLoss = 0;
+      let scoreLoss = 0;
+
+      if (isHeavy) {
+        if (sizeRatio >= 6.2) {
+          coinLoss = clamp(Math.round(player.coins * 0.03 + mineR / 18), 1, 7);
+          tailLoss = 70 + coinLoss * 4;
+        } else if (sizeRatio >= 5.0) {
+          coinLoss = clamp(Math.round(player.coins * 0.05 + mineR / 13), 3, 12);
+          tailLoss = 110 + coinLoss * 5;
+        } else {
+          coinLoss = clamp(Math.round(player.coins * 0.07 + sizeRatio * 2 + mineR / 10), 5, 18);
+          tailLoss = 160 + coinLoss * 6;
+        }
+        scoreLoss = Math.round(coinLoss * 1.8);
+      } else if (isSeeker) {
+        if (sizeRatio >= 5.0) {
+          coinLoss = clamp(Math.round(player.coins * 0.03 + mineR / 18), 1, 6);
+          tailLoss = 75 + coinLoss * 4;
+        } else if (sizeRatio >= 4.0) {
+          coinLoss = clamp(Math.round(player.coins * 0.04 + mineR / 16), 2, 8);
+          tailLoss = 95 + coinLoss * 5;
+        } else {
+          coinLoss = clamp(Math.round(player.coins * 0.06 + sizeRatio * 1.6), 3, 14);
+          tailLoss = 125 + coinLoss * 6;
+        }
+        scoreLoss = Math.round(coinLoss * 1.5);
+      } else {
+        if (sizeRatio >= 6.0) {
+          coinLoss = clamp(Math.round(player.coins * 0.005), 0, 1);
+          tailLoss = 28;
+          scoreLoss = 0;
+          player.score += 8;
+          spawnFoodBurst(mx, my, Math.max(8, mineR * 0.55), 2);
+        } else if (sizeRatio >= 4.0) {
+          coinLoss = clamp(Math.round(player.coins * 0.018 + mineR / 24), 0, 4);
+          tailLoss = 55 + coinLoss * 4;
+          scoreLoss = Math.round(coinLoss * 0.8);
+        } else {
+          coinLoss = clamp(Math.round(player.coins * 0.05 + sizeRatio * 2), 2, 22);
+          tailLoss = 90 + coinLoss * 6;
+          scoreLoss = Math.round(coinLoss * 1.5);
+        }
+      }
+
+      if (coinLoss > 0) player.coins = Math.max(0, player.coins - coinLoss);
+      if (scoreLoss > 0) player.score = Math.max(0, player.score - scoreLoss);
+      if (tailLoss > 0) loseTailSegments(tailLoss);
     }
+
     const dx = player.x - mx;
     const dy = player.y - my;
     const d = Math.hypot(dx, dy) || 1;
-    player.vx += (dx / d) * 260;
-    player.vy += (dy / d) * 260;
-    player.invulnTime = Math.max(player.invulnTime, 0.95);
+    const kb = (mineKind === 'heavy') ? 320 : (mineKind === 'seeker' ? 285 : 220);
+    player.vx += (dx / d) * kb;
+    player.vy += (dy / d) * kb;
+    player.invulnTime = Math.max(player.invulnTime, mineKind === 'heavy' ? 1.05 : 0.75);
     player.pauseGrace = Math.max(player.pauseGrace, 0.15);
-    kickShake(9, 0.12);
-    spawnBurst(mx, my, 20, 14, 220);
+    kickShake(mineKind === 'heavy' ? 11 : 8, mineKind === 'heavy' ? 0.14 : 0.10);
+    spawnBurst(mx, my, mineKind === 'heavy' ? 40 : 20, mineKind === 'heavy' ? 18 : 14, mineKind === 'heavy' ? 260 : 220);
     AudioFX.hit?.();
   }
 
@@ -3509,7 +3569,8 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
 
         // mines
         for (const m of ch.mines) {
-          const mr = m.r * mineScale;
+          const mineScaleLocal = (m.kind === 'heavy') ? lerp(1.0, 0.78, clamp((sizeRatio - 1) / 6, 0, 1)) : mineScale;
+          const mr = m.r * mineScaleLocal;
           // slight motion (orbiting wobble)
           m.phase += dt * (0.6 + level*0.02) * m.drift;
           let mx = m.x + Math.cos(m.phase) * (10 + level*0.2);
@@ -3548,10 +3609,17 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
             if (!hitThisFrame) {
               hitThisFrame = true;
               const sizeRatioBig = player.r / player.baseR;
-              const canCrushMine = sizeRatioBig >= 3.6;
+              const mineKind = m.kind || 'wobble';
+              const canCrushMine = mineKind === 'heavy'
+                ? (sizeRatioBig >= 5.2)
+                : (mineKind === 'seeker' ? (sizeRatioBig >= 4.4) : (sizeRatioBig >= 3.6));
               if (canCrushMine && m.id) {
                 collected.add(m.id);
-                crushMine(mx, my, mr);
+                crushMine(mx, my, mr, mineKind);
+                if (mineKind !== 'heavy' && sizeRatioBig >= 5.8) {
+                  spawnFoodBurst(mx, my, Math.max(10, mr * 0.75), clamp(Math.round(mr / 10), 2, 4));
+                  player.score += 12;
+                }
               } else {
                 damagePlayer();
               }
@@ -3563,14 +3631,23 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
             // check few tail points near the end (most relevant)
             // (cheap) sample last N
             const N = Math.min(40, tail.points.length);
+            const sizeRatioTail = player.r / player.baseR;
             for (let i = tail.points.length - 1; i >= tail.points.length - N; i--) {
               const p = tail.points[i];
               const tr = 8; // tail thickness
               const hr = (mr + tr);
               if (dist2(p.x,p.y, mx,my) < hr*hr) {
-                // cut tail hard, and add adrenaline
-                loseTailSegments(140);
-                player.nearMiss += 0.25;
+                if ((m.kind || 'wobble') !== 'heavy' && sizeRatioTail >= 5.4 && m.id) {
+                  collected.add(m.id);
+                  spawnFoodBurst(mx, my, Math.max(8, mr * 0.6), 2);
+                  player.score += 8;
+                } else {
+                  const tailCut = (m.kind === 'heavy')
+                    ? 180
+                    : ((m.kind === 'seeker') ? (sizeRatioTail >= 5.0 ? 90 : 140) : (sizeRatioTail >= 6.0 ? 28 : (sizeRatioTail >= 4.0 ? 60 : 140)));
+                  loseTailSegments(tailCut);
+                  player.nearMiss += 0.25;
+                }
                 break;
               }
             }
@@ -3672,14 +3749,34 @@ if (ch.viruses) {
     const rr = player.r + vr * 1.05;
 
     if (d < rr) {
-      if (player.r > vr * 1.35) {
-        // eat virus, but it bites your tail (risk-reward)
+      const cleanEat = player.r > vr * 1.42;
+      const canEat = player.r > vr * 1.18;
+      const canBreak = player.r > vr * 0.98;
+
+      if (cleanEat) {
         collected.add(v.id);
-        player.coins += 10;
-        player.score += 120;
-        loseTailSegments(180);
+        player.coins += 12;
+        player.score += 150;
+        spawnFoodBurst(v.x, v.y, Math.max(10, vr * 0.8), clamp(Math.round(vr / 7), 3, 6));
         spawnBurst(v.x, v.y, 285, 20, 260);
-        kickShake(8, 0.12);
+        kickShake(8, 0.11);
+      } else if (canEat) {
+        collected.add(v.id);
+        player.coins += 8;
+        player.score += 110;
+        loseTailSegments(70);
+        spawnBurst(v.x, v.y, 285, 18, 240);
+        kickShake(8, 0.11);
+      } else if (canBreak) {
+        collected.add(v.id);
+        player.coins += 4;
+        player.score += 60;
+        loseTailSegments(120);
+        spawnFoodBurst(v.x, v.y, Math.max(10, vr * 0.9), clamp(Math.round(vr / 6), 4, 7));
+        player.vx *= 0.92;
+        player.vy *= 0.92;
+        kickShake(10, 0.12);
+        spawnBurst(v.x, v.y, 285, 16, 220);
       } else if (player.invulnTime <= 0) {
         // virus slices tail hard
         player.invulnTime = 0.7;
@@ -4198,7 +4295,8 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const my = m.y + Math.sin(m.phase*1.1) * (10 + level*0.2);
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
-        drawMine(x,y,m.r * mineScaleR);
+        const mineScaleLocalR = (m.kind === 'heavy') ? lerp(1.0, 0.78, clamp((sizeRatioR - 1) / 6, 0, 1)) : mineScaleR;
+        drawMine(x,y,m.r * mineScaleLocalR);
       }
 // agar-style cells
 if (ch.cells) {
