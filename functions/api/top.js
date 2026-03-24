@@ -1,55 +1,66 @@
-function corsHeaders() {
-  return {
-    "content-type": "application/json",
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
-  };
-}
-
-export function onRequestOptions() {
-  return new Response(null, { status: 204, headers: corsHeaders() });
-}
-
 export async function onRequestGet({ env, request }) {
   const url = new URL(request.url);
-
+  const scope = (url.searchParams.get("scope") || "seed").slice(0, 16);
   const seed = parseInt(url.searchParams.get("seed") || "0", 10);
   const mode = (url.searchParams.get("mode") || "score").slice(0, 16);
   const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
 
-  if (!seed) {
+  if (scope !== "all" && !seed) {
     return new Response(JSON.stringify({ error: "seed is required" }), {
       status: 400,
-      headers: corsHeaders(),
+      headers: { "content-type": "application/json", "access-control-allow-origin": "*" },
     });
   }
 
-  const stmt = env.DB.prepare(
-    `WITH ranked AS (
-       SELECT
-         name,
-         score,
-         time_ms,
-         coins,
-         created_at,
-         ROW_NUMBER() OVER (
-           PARTITION BY LOWER(TRIM(name))
-           ORDER BY score DESC, time_ms DESC, coins DESC, created_at DESC
-         ) AS rn
-       FROM scores
-       WHERE seed = ? AND mode = ?
-     )
-     SELECT name, score, time_ms, coins, created_at
-     FROM ranked
-     WHERE rn = 1
-     ORDER BY score DESC, time_ms DESC, coins DESC, created_at DESC
-     LIMIT ?`
-  ).bind(seed, mode, limit);
+  let stmt;
+  if (scope === "all") {
+    stmt = env.DB.prepare(
+      `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, s.seed, COALESCE(s.extracted, 0) AS extracted
+       FROM scores s
+       WHERE s.mode = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM scores s2
+           WHERE s2.mode = s.mode
+             AND s2.name = s.name
+             AND (
+               s2.score > s.score
+               OR (s2.score = s.score AND s2.time_ms > s.time_ms)
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins > s.coins)
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) > COALESCE(s.extracted,0))
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) = COALESCE(s.extracted,0) AND s2.created_at > s.created_at)
+             )
+         )
+       ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, COALESCE(s.extracted,0) DESC, s.created_at DESC
+       LIMIT ?`
+    ).bind(mode, limit);
+  } else {
+    stmt = env.DB.prepare(
+      `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, s.seed, COALESCE(s.extracted, 0) AS extracted
+       FROM scores s
+       WHERE s.seed = ? AND s.mode = ?
+         AND NOT EXISTS (
+           SELECT 1
+           FROM scores s2
+           WHERE s2.seed = s.seed
+             AND s2.mode = s.mode
+             AND s2.name = s.name
+             AND (
+               s2.score > s.score
+               OR (s2.score = s.score AND s2.time_ms > s.time_ms)
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins > s.coins)
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) > COALESCE(s.extracted,0))
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) = COALESCE(s.extracted,0) AND s2.created_at > s.created_at)
+             )
+         )
+       ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, COALESCE(s.extracted,0) DESC, s.created_at DESC
+       LIMIT ?`
+    ).bind(seed, mode, limit);
+  }
 
   const { results } = await stmt.all();
 
-  return new Response(JSON.stringify({ seed, mode, rows: results || [] }), {
-    headers: corsHeaders(),
+  return new Response(JSON.stringify({ seed, mode, scope, rows: results }), {
+    headers: { "content-type": "application/json", "access-control-allow-origin": "*" },
   });
 }
