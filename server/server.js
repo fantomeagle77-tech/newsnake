@@ -27,11 +27,15 @@ function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
-function sendJson(res, code, data) {
+function sendJson(res, code, data, extraHeaders = {}) {
   const body = JSON.stringify(data);
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    ...extraHeaders,
   });
   res.end(body);
 }
@@ -77,7 +81,41 @@ function submitRow(raw) {
   return row;
 }
 
-function getTop(seed, mode, limit = 10) {
+
+function bestRowByRules(a, b) {
+  if (!b) return a;
+  if ((a.score | 0) !== (b.score | 0)) return (a.score | 0) > (b.score | 0) ? a : b;
+  if ((a.time_ms | 0) !== (b.time_ms | 0)) return (a.time_ms | 0) > (b.time_ms | 0) ? a : b;
+  if ((a.coins | 0) !== (b.coins | 0)) return (a.coins | 0) > (b.coins | 0) ? a : b;
+  if ((a.extracted | 0) !== (b.extracted | 0)) return (a.extracted | 0) > (b.extracted | 0) ? a : b;
+  return (a.created_at | 0) > (b.created_at | 0) ? a : b;
+}
+
+function getAllRowsForMode(mode) {
+  const out = [];
+  for (const [key, rows] of leaderboards.entries()) {
+    const parts = String(key).split('::');
+    const rowMode = parts[1] || 'score';
+    if (rowMode === String(mode || 'score')) out.push(...rows);
+  }
+  return out;
+}
+
+function dedupeBestRows(rows) {
+  const best = new Map();
+  for (const row of rows) {
+    const clean = sanitizeName(row.name);
+    const prev = best.get(clean);
+    best.set(clean, bestRowByRules(row, prev));
+  }
+  return sortRows(Array.from(best.values()));
+}
+
+function getTop(seed, mode, limit = 10, scope = 'seed') {
+  if (scope === 'all') {
+    const rows = dedupeBestRows(getAllRowsForMode(mode));
+    return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
+  }
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
   return rows.slice(0, clamp(Number(limit) || 10, 1, 50));
 }
@@ -85,6 +123,17 @@ function getTop(seed, mode, limit = 10) {
 function getGhost(seed, mode) {
   const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
   return rows.find(r => r.ghost) || rows[0] || null;
+}
+
+function getPersonalBest(seed, mode, name, scope = 'seed') {
+  const clean = sanitizeName(name);
+  if (scope === 'all') {
+    const rows = dedupeBestRows(getAllRowsForMode(mode));
+    return rows.find(r => sanitizeName(r.name) === clean) || null;
+  }
+  const rows = leaderboards.get(leaderboardKey(seed, mode)) || [];
+  const mine = rows.filter(r => sanitizeName(r.name) === clean);
+  return mine.length ? dedupeBestRows(mine)[0] : null;
 }
 
 function getRoom(name) {
@@ -176,19 +225,6 @@ function serveStatic(req, res, pathname) {
   });
 }
 
-
-function broadcastCustom(room, payload) {
-  if (!room || !room.players.size) return;
-  const body = JSON.stringify(payload);
-  for (const p of room.players.values()) {
-    if (p.ws && p.ws.readyState === 1) p.ws.send(body);
-  }
-}
-
-function roomEvent(room, text, tone='info') {
-  broadcastCustom(room, { type:'room_event', text:String(text||''), tone, ts:Date.now() });
-}
-
 function makeSnapshot(room) {
   const players = [...room.players.values()].map(p => ({
     id: p.id,
@@ -234,9 +270,16 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
 
+  if (req.method === 'OPTIONS') return sendJson(res, 200, { ok: true });
+
   if (pathname === '/api/top' && req.method === 'GET') {
     return sendJson(res, 200, {
-      rows: getTop(url.searchParams.get('seed'), url.searchParams.get('mode'), url.searchParams.get('limit')),
+      rows: getTop(
+        url.searchParams.get('seed'),
+        url.searchParams.get('mode'),
+        url.searchParams.get('limit'),
+        url.searchParams.get('scope') || 'seed'
+      ),
     });
   }
 
@@ -344,26 +387,36 @@ wss.on('connection', (ws) => {
         spawn,
       });
 
-      roomEvent(room, `🟢 ${ws.player.name} вошёл в room ${room.name}`, 'info');
       broadcastRoom(room);
       return;
     }
 
     if (msg.type === 'rename') {
-      const prevName = ws.player.name;
       ws.player.name = sanitizeName(msg.name);
       const room = rooms.get(ws.player.room);
-      if (room && prevName !== ws.player.name) roomEvent(room, `✏️ ${prevName} → ${ws.player.name}`, 'info');
       if (room) broadcastRoom(room);
       return;
     }
 
-    if (msg.type === 'quick_signal') {
+
+    if (msg.type === 'signal') {
       const room = rooms.get(ws.player.room);
-      if (room) broadcastCustom(room, { type:'quick_signal', id: ws.player.id, name: ws.player.name, kind: String(msg.kind || 'wave').slice(0,12), x: Number(msg.x)||0, y: Number(msg.y)||0, ts: Date.now() });
+      if (!room) return;
+      const payload = JSON.stringify({
+        type: 'signal',
+        kind: String(msg.kind || 'hello').slice(0,16),
+        id: ws.player.id,
+        name: ws.player.name,
+        x: clamp(Number(msg.x) || 0, -1000000, 1000000),
+        y: clamp(Number(msg.y) || 0, -1000000, 1000000),
+        color: ws.player.color || '#79C8FF',
+        ts: Date.now(),
+      });
+      for (const p of room.players.values()) {
+        if (p.ws && p.ws.readyState === 1) p.ws.send(payload);
+      }
       return;
     }
-
     if (msg.type === 'ping') {
       if (typeof msg.name === 'string' && msg.name.trim()) {
         ws.player.name = sanitizeName(msg.name);
@@ -391,7 +444,6 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'state') {
-      const prevExtracted = !!ws.player.extracted;
       ws.player.x = clamp(Number(msg.x) || 0, -1000000, 1000000);
       ws.player.y = clamp(Number(msg.y) || 0, -1000000, 1000000);
       ws.player.r = clamp(Number(msg.r) || 18, 8, 2000);
@@ -401,10 +453,6 @@ wss.on('connection', (ws) => {
         ws.player.alive = !!msg.alive;
         ws.player.extracted = !!msg.extracted;
       }
-      if (!prevExtracted && ws.player.extracted) {
-        const room = rooms.get(ws.player.room);
-        if (room) roomEvent(room, `🚪 ${ws.player.name} выполнил экстракцию`, 'good');
-      }
       return;
     }
   });
@@ -413,7 +461,6 @@ wss.on('connection', (ws) => {
     const room = rooms.get(ws.player.room);
     if (room) {
       room.players.delete(ws.player.id);
-      roomEvent(room, `🔴 ${ws.player.name} вышел`, 'info');
       if (!room.players.size) rooms.delete(room.name);
       else broadcastRoom(room);
     }
@@ -473,7 +520,6 @@ function processRoomPvp(room, now) {
         respawnInMs: 1400,
       });
 
-      roomEvent(room, `☠ ${big.name} съел ${small.name}`, 'kill');
       return true;
     }
   }
