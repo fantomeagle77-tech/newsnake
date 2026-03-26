@@ -366,7 +366,7 @@
   <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:260px; overflow:auto;"></ol>
 
   <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Глобальный TOP 20 и личные рекорды хранятся в D1 и доступны после перезагрузки.
+    Глобальный TOP 20 и личные рекорды хранятся на сервере и доступны после перезагрузки.
   </div>
 </div>
 
@@ -895,7 +895,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const btnStart = document.getElementById('start');
 
   UI_REFS_READY = true;
-  updateShardsUI();
 
   // Best time / personal best (local fallback + server sync)
   const BEST_KEY = 'voidrun_best_time';
@@ -2205,6 +2204,16 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     hasPointer = false;
     mouseX = W/2;
     mouseY = H/2;
+  }
+
+  function updatePointerFromClient(clientX, clientY) {
+    if (!pointerInsideGame(clientX, clientY)) {
+      resetPointerToCenter();
+      return;
+    }
+    hasPointer = true;
+    mouseX = clientX * DPR;
+    mouseY = clientY * DPR;
   }
 
   function pointerInsideGame(clientX, clientY) {
