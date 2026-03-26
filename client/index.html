@@ -1732,11 +1732,12 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
     if (mobileUi) {
       const isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
-      mobileUi.style.display = (isMobile && !activeModal) ? 'block' : 'none';
-      mobileUi.style.pointerEvents = activeModal ? 'none' : '';
-      mobileUi.setAttribute('aria-hidden', activeModal ? 'true' : 'false');
-
       const onlineOpen = !!(onlinePanelEl && onlinePanelEl.style.display !== 'none');
+      const blockMobileUi = activeModal || (isMobile && onlineOpen);
+      mobileUi.style.display = (isMobile && !blockMobileUi) ? 'block' : 'none';
+      mobileUi.style.pointerEvents = blockMobileUi ? 'none' : '';
+      mobileUi.setAttribute('aria-hidden', blockMobileUi ? 'true' : 'false');
+
       if (signalBarEl) {
         signalBarEl.style.display = (signalBarOpen && !(isMobile && onlineOpen)) ? 'flex' : 'none';
         signalBarEl.style.right = isMobile ? '8px' : '16px';
@@ -2759,31 +2760,50 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     syncUiLayers();
   }
 
-  btnRestart.addEventListener('click', ()=>{
-    if (state === 'DEAD' && requestServerRespawn()) return;
-    overlay.style.display = 'none';
-    syncUiLayers();
-    state = 'RUN';
-    resetGame();
-  });
-  btnPause.addEventListener('click', ()=>{
-    if (state === 'RUN' || state === 'PAUSE') togglePause();
-  });
-
-
   function bindTap(el, handler){
     if (!el || !handler) return;
+
     let lastFire = 0;
-    const fire = (e) => {
+    let lastPointerLikeAt = 0;
+
+    const invoke = (e) => {
       const now = Date.now();
-      if (now - lastFire < 260) return;
+      if (now - lastFire < 420) return;
       lastFire = now;
       try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_) {}
       handler(e);
     };
-    el.addEventListener('touchstart', fire, { passive:false });
-    el.addEventListener('pointerdown', fire, { passive:false });
-    el.addEventListener('click', fire, { passive:false });
+
+    const onPointerDown = (e) => {
+      if (e && e.pointerType === 'mouse' && e.button !== 0) return;
+      lastPointerLikeAt = Date.now();
+      invoke(e);
+    };
+
+    const onTouchStart = (e) => {
+      lastPointerLikeAt = Date.now();
+      invoke(e);
+    };
+
+    const onClick = (e) => {
+      const now = Date.now();
+      if (now - lastPointerLikeAt < 650) {
+        try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_) {}
+        return;
+      }
+      invoke(e);
+    };
+
+    const onKeyDown = (e) => {
+      if (!e) return;
+      if (e.key === 'Enter' || e.key === ' ') invoke(e);
+    };
+
+    if (window.PointerEvent) el.addEventListener('pointerdown', onPointerDown, { passive:false });
+    else el.addEventListener('touchstart', onTouchStart, { passive:false });
+
+    el.addEventListener('click', onClick, { passive:false });
+    el.addEventListener('keydown', onKeyDown, { passive:false });
   }
 
 
@@ -2851,10 +2871,14 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
   }
 	
-  function toggleTopPanel(){
+  function toggleTopPanel(forceOpen = null){
     if (!onlinePanelEl) return;
-    const cur = onlinePanelEl.style.display;
-    onlinePanelEl.style.display = (cur === 'none' || cur === '') ? 'block' : 'none';
+    const nextOpen = (forceOpen == null)
+      ? (onlinePanelEl.style.display === 'none' || onlinePanelEl.style.display === '')
+      : !!forceOpen;
+    onlinePanelEl.style.display = nextOpen ? 'block' : 'none';
+    layoutFloatingPanels();
+    syncUiLayers();
   }
 
   bindTap(document.getElementById("btnTop"), async () => {
