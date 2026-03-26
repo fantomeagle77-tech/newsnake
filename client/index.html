@@ -254,19 +254,6 @@
       }
     }
 
-
-    /* retention features */
-    #eventFeed{position:fixed;left:16px;top:272px;z-index:9991;width:260px;max-height:220px;overflow:auto;padding:10px 12px;border-radius:16px;background:rgba(8,12,24,.46);border:1px solid rgba(90,140,255,.14);color:#EAF1FF;backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.22);font-size:12px;line-height:1.4;}
-    #eventFeed .ttl{font-weight:800;margin-bottom:6px;opacity:.96;} #eventFeed .row{margin:0 0 6px 0;opacity:.9;}
-    #contractsModal{position:fixed;inset:0;z-index:10016;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.68);backdrop-filter:blur(8px);} 
-    #contractsModal .box{width:min(92vw,520px);max-height:min(86vh,760px);overflow:auto;border-radius:24px;padding:22px;background:rgba(8,12,24,.94);border:1px solid rgba(90,140,255,.18);box-shadow:0 20px 80px rgba(0,0,0,.45);color:#EAF1FF;}
-    #contractsList .ct{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);margin:0 0 8px 0;} 
-    #contractsList .done{border-color:rgba(110,255,170,.28);background:rgba(70,180,120,.08);} 
-    #contractsList .meta{opacity:.82;font-size:12px;margin-top:4px;} 
-    #contractsList .bar{margin-top:8px;height:8px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);} 
-    #contractsList .bar>i{display:block;height:100%;background:linear-gradient(90deg,#6fa8ff,#8a76ff);width:0%;}
-    @media (max-width:900px){#eventFeed{left:12px;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 112px);width:240px;max-height:120px;}}
-    body.mobile-ui #eventFeed{display:none;}
 </style>
 </head>
 <body>
@@ -285,7 +272,6 @@
     <div class="pill" title="Щит спасает от одного удара"><span>🛡️ <span class="k">Щит</span></span> <b id="shield">0</b></div>
     <div class="pill" title="Текущий уровень сложности"><span>Lv <span class="k">Уровень</span></span> <b id="lv">1</b></div>
     <div class="pill" title="Лучшее время выживания на этом устройстве"><span>🏆 <span class="k">Лучшее</span></span> <b id="best">0.0s</b></div>
-    <div class="pill" title="Осколки: награда за экстракцию и контракты"><span>🧩 <span class="k">Осколки</span></span> <b id="shards">0</b></div>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
 	<button class="btn" id="btnPrevTrack" title="Предыдущий трек">⏮</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
@@ -294,8 +280,6 @@
 	<button class="btn" id="btnFounder" title="Founder Pack">💎</button>
 	<button class="btn" id="btnDonate" title="Поддержать">❤️</button>
 	<button class="btn" id="btnEject" title="Сброс массы">🪙</button>
-    <button class="btn" id="btnContracts" title="Контракты дня">📜</button>
-    <button class="btn" id="btnSignals" title="Быстрые сигналы">💬</button>
     <div class="spacer"></div>
     <button class="btn" id="pause" title="Пауза">Пауза</button>
     <button class="btn" id="restart" title="Новый забег">Заново</button>
@@ -323,8 +307,6 @@
   <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
     ты один
   </div>
-  <div id="huntTarget" style="font-size:12px; opacity:.88; margin-top:10px; border-top:1px solid rgba(255,255,255,.08); padding-top:8px;">🎯 Охота: —</div>
-  <div id="synergyLine" style="font-size:12px; opacity:.82; margin-top:6px;">🧪 Синергия: —</div>
   <div style="display:flex; gap:8px; margin-top:10px;">
     <button class="btn" id="netRenameBtn" style="padding:8px 12px; font-size:12px;">Ник</button>
   </div>
@@ -433,7 +415,7 @@
 
 <div id="signalBar" style="
   position:fixed; right:16px; top:86px; z-index:9990;
-  display:none; gap:8px; align-items:center; justify-content:space-between;
+  display:flex; gap:8px; align-items:center; justify-content:space-between;
   width:280px; box-sizing:border-box;
   padding:8px 10px; border-radius:16px;
   background:rgba(8,12,24,.52); border:1px solid rgba(90,140,255,.16);
@@ -456,26 +438,6 @@
   <span id="brandFooterText" style="font-weight:800; opacity:.82;">Void Run™ © 2026</span>
   <button class="btn" id="btnContact" title="Контакты и техподдержка" style="padding:6px 10px; font-size:12px;">✉</button>
   <button class="btn" id="btnBug" title="Сообщить о баге" style="padding:6px 10px; font-size:12px;">🐞</button>
-</div>
-
-<div id="eventFeed">
-  <div class="ttl">📰 События</div>
-  <div id="eventFeedList"></div>
-</div>
-
-<div id="contractsModal">
-  <div class="box">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-      <div>
-        <div style="font-size:26px;font-weight:900;">Контракты дня</div>
-        <div id="contractsSeedLine" style="opacity:.78; margin-top:4px;">seed daily</div>
-      </div>
-      <button class="btn" id="contractsClose">Закрыть</button>
-    </div>
-    <div id="contractsShardsLine" style="margin-top:10px; opacity:.88;">🧩 Осколки: 0</div>
-    <div id="contractsList" style="margin-top:14px;"></div>
-    <div id="contractsSynergyBox" style="margin-top:14px; opacity:.88; line-height:1.5;"></div>
-  </div>
 </div>
 
 <div id="mobileUi" aria-hidden="true">
@@ -870,21 +832,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const supportCloseEl = document.getElementById('supportClose');
   const btnFounder = document.getElementById('btnFounder');
   const btnDonate = document.getElementById('btnDonate');
-  const btnContracts = document.getElementById('btnContracts');
-  const btnSignals = document.getElementById('btnSignals');
   const btnFooterSupport = document.getElementById('btnFooterSupport');
   const btnContact = document.getElementById('btnContact');
   const btnBug = document.getElementById('btnBug');
-  const elShards = document.getElementById('shards');
-  const huntTargetEl = document.getElementById('huntTarget');
-  const synergyLineEl = document.getElementById('synergyLine');
-  const eventFeedListEl = document.getElementById('eventFeedList');
-  const contractsModalEl = document.getElementById('contractsModal');
-  const contractsCloseEl = document.getElementById('contractsClose');
-  const contractsSeedLineEl = document.getElementById('contractsSeedLine');
-  const contractsShardsLineEl = document.getElementById('contractsShardsLine');
-  const contractsListEl = document.getElementById('contractsList');
-  const contractsSynergyBoxEl = document.getElementById('contractsSynergyBox');
   const signalBarEl = document.getElementById('signalBar');
   const sigHelloEl = document.getElementById('sigHello');
   const sigWarnEl = document.getElementById('sigWarn');
@@ -1131,30 +1081,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }
 
 
-  const LS_SHARDS = 'voidrun_shards_v1';
-  const LS_CONTRACTS = 'voidrun_contracts_v1';
-  let shards = Math.max(0, Number(localStorage.getItem(LS_SHARDS) || '0') || 0);
-  let contractState = null;
-  const EVENT_FEED = [];
-  let lastRosterNames = new Map();
-  let signalBarOpen = false;
-
-  function saveShards(){ localStorage.setItem(LS_SHARDS, String(shards|0)); }
-  function updateShardsUI(){ if (elShards) elShards.textContent = String(shards|0); if (contractsShardsLineEl) contractsShardsLineEl.textContent = `🧩 Осколки: ${shards|0}`; }
-  function pushEvent(text, icon='•'){ EVENT_FEED.unshift({text, icon, ts: Date.now()}); if (EVENT_FEED.length > 8) EVENT_FEED.length = 8; if (eventFeedListEl) eventFeedListEl.innerHTML = EVENT_FEED.map(ev => `<div class="row">${ev.icon} ${ev.text}</div>`).join(''); }
-  function addShards(amount, reason=''){ amount = Math.max(0, amount|0); if (!amount) return; shards += amount; saveShards(); updateShardsUI(); pushEvent(`${reason ? reason + ' • ' : ''}+${amount} оск.`, '🧩'); }
-  function makeDailyContracts(seedNum){ const seed=(Number(seedNum)||0)>>>0; const bag=[ {id:'time120',title:'Выжить 120 секунд',goal:120,reward:6,prog:()=>Math.floor(timeSurv),done:()=>timeSurv>=120,fmt:v=>`${v}/120s`}, {id:'coins60',title:'Собрать 60 монет',goal:60,reward:5,prog:()=>player.coins|0,done:()=> (player.coins|0)>=60,fmt:v=>`${v}/60`}, {id:'score800',title:'Набрать 800 очков',goal:800,reward:6,prog:()=>player.score|0,done:()=> (player.score|0)>=800,fmt:v=>`${v}/800`}, {id:'size4',title:'Достичь размера x4.00',goal:400,reward:7,prog:()=>Math.floor((player.r/player.baseR)*100),done:()=> (player.r/player.baseR)>=4,fmt:v=>`x${(v/100).toFixed(2)}/x4.00`}, {id:'relic3',title:'Собрать 3 реликвии',goal:3,reward:8,prog:()=>player.relics.length|0,done:()=> player.relics.length>=3,fmt:v=>`${v}/3`}, {id:'extract1',title:'Сделать экстракцию',goal:1,reward:12,prog:()=>player.extracted?1:0,done:()=> !!player.extracted,fmt:v=>`${v}/1`} ]; let out=[], s=seed ^ 0x9e3779b9; for(let i=0;i<3;i++){ s=(Math.imul(s ^ (s>>>15), 2246822519) + 3266489917)>>>0; const pick=s%bag.length; out.push(bag.splice(pick,1)[0]); } return out; }
-  function loadContractState(){ const seed=String(SEED); let raw=null; try{ raw=JSON.parse(localStorage.getItem(LS_CONTRACTS)||'null'); }catch(_){} if(!raw || raw.seed!==seed) raw={ seed, claimed:{} }; contractState=raw; return raw; }
-  function saveContractState(){ if (contractState) localStorage.setItem(LS_CONTRACTS, JSON.stringify(contractState)); }
-  const DAILY_CONTRACTS = makeDailyContracts(SEED); loadContractState(); updateShardsUI();
-  function currentSynergy(){ const set=new Set(player.relics||[]); if(set.has('beam')&&set.has('aura')) return 'Nova Beam'; if(set.has('magnet')&&set.has('echo')) return 'Tracker'; if(set.has('anti')&&set.has('beam')) return 'Crusher'; if(set.has('anti')&&set.has('aura')) return 'Shell'; if(set.has('magnet')&&set.has('aura')) return 'Vacuum'; return '—'; }
-  function describeSynergies(){ return ['beam + aura → Nova Beam','magnet + echo → Tracker','anti + beam → Crusher','anti + aura → Shell','magnet + aura → Vacuum']; }
-  function renderContracts(){ if(!contractsListEl) return; if(contractsSeedLineEl) contractsSeedLineEl.textContent=`room daily • seed ${SEED}`; contractsListEl.innerHTML=''; for(const ct of DAILY_CONTRACTS){ const progress=Number(ct.prog()||0); const done=!!ct.done(); if(done && !contractState.claimed[ct.id]){ contractState.claimed[ct.id]=1; saveContractState(); addShards(ct.reward, `Контракт: ${ct.title}`); } const claimed=!!contractState.claimed[ct.id]; const ratio=ct.goal?Math.max(0,Math.min(1,progress/ct.goal)):(done?1:0); const row=document.createElement('div'); row.className='ct'+(claimed?' done':''); row.innerHTML=`<div style="font-weight:800;">${claimed?'✅ ':''}${ct.title}</div><div class="meta">Награда: 🧩 ${ct.reward} • ${ct.fmt(progress)}</div><div class="bar"><i style="width:${Math.round(ratio*100)}%"></i></div>`; contractsListEl.appendChild(row);} if(contractsSynergyBoxEl) contractsSynergyBoxEl.innerHTML=`<b>Синергии:</b><br>${describeSynergies().join('<br>')}`; updateShardsUI(); }
-  function openContracts(){ if(contractsModalEl){ renderContracts(); contractsModalEl.style.display='flex'; syncUiLayers(); } }
-  function closeContracts(){ if(contractsModalEl){ contractsModalEl.style.display='none'; syncUiLayers(); } }
-  function updateLeaderUi(){ const ranked=netRankedPlayers(); const leader=ranked[0]||null; if(huntTargetEl){ if(!leader) huntTargetEl.textContent='🎯 Охота: —'; else if(leader.self) huntTargetEl.textContent=`👑 Ты лидер • x${((leader.r||18)/18).toFixed(2)}`; else huntTargetEl.textContent=`🎯 Охота: ${String(leader.name||'anon').slice(0,18)} • x${((leader.r||18)/18).toFixed(2)}`; } if(synergyLineEl) synergyLineEl.textContent=`🧪 Синергия: ${currentSynergy()}`; }
-  function detectRosterEvents(){ const now=new Map((NET.roster||[]).filter(p=>!p.self).map(p=>[p.id,p.name||'anon'])); if(lastRosterNames.size){ for(const [id,name] of now) if(!lastRosterNames.has(id)) pushEvent(`${String(name).slice(0,18)} вошёл в комнату`,'➕'); for(const [id,name] of lastRosterNames) if(!now.has(id)) pushEvent(`${String(name).slice(0,18)} вышел из комнаты`,'➖'); } lastRosterNames=now; }
-
   function netRankedPlayers() {
     const rows = [];
     rows.push({
@@ -1255,10 +1181,23 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   }
 
   function sendQuickSignal(kind='hello') {
-    pushNetSignal(kind, { name: ONLINE.name || 'anon', id: NET.id || 'self', x: player.x, y: player.y, color: NET.color || '#79C8FF', self: true });
-    pushEvent(`${String(ONLINE.name || 'anon').slice(0,18)}: ${kind}`, {hello:'👋',warn:'⚠️',portal:'🚪',help:'🆘'}[kind] || '💬');
     if (!NET_ENABLED || !NET.connected) return;
-    netSend({ type:'signal', room: NET.room, kind, x: player.x, y: player.y });
+    const payload = {
+      type: 'signal',
+      room: NET.room,
+      kind,
+      x: player.x,
+      y: player.y,
+    };
+    netSend(payload);
+    pushNetSignal(kind, {
+      name: ONLINE.name || 'anon',
+      id: NET.id || 'self',
+      x: player.x,
+      y: player.y,
+      color: NET.color || '#79C8FF',
+      self: true,
+    });
   }
 
   function netHello(force = false) {
@@ -1360,8 +1299,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
         }
 
         netRenderMiniList();
-        detectRosterEvents();
-        updateLeaderUi();
         updateHUD();
         return;
       }
@@ -1388,8 +1325,14 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
       }
 
       if (msg.type === 'signal') {
-        pushNetSignal(msg.kind || 'hello', { name: msg.name || 'anon', id: msg.id || '', x: msg.x, y: msg.y, color: msg.color || '#EAF1FF', self: msg.id === NET.id });
-        if (msg.id !== NET.id) pushEvent(`${String(msg.name || 'anon').slice(0,18)}: ${msg.kind || 'signal'}`, {hello:'👋',warn:'⚠️',portal:'🚪',help:'🆘'}[msg.kind] || '💬');
+        pushNetSignal(msg.kind || 'hello', {
+          name: msg.name || 'anon',
+          id: msg.id || '',
+          x: msg.x,
+          y: msg.y,
+          color: msg.color || '#EAF1FF',
+          self: msg.id === NET.id,
+        });
         return;
       }
 
@@ -1714,8 +1657,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const overlayOpen = !!(overlayEl && overlayEl.style.display !== 'none');
     const nickGateOpen = !!(nickGate && nickGate.style.display !== 'none');
     const supportOpen = !!(supportModal && supportModal.style.display !== 'none');
-    const contractsOpen = !!(contractsModalEl && contractsModalEl.style.display !== 'none');
-    const activeModal = nickGateOpen || overlayOpen || supportOpen || contractsOpen;
+    const activeModal = nickGateOpen || overlayOpen || supportOpen;
 
     if (overlayEl) {
       overlayEl.style.zIndex = '10030';
@@ -1738,7 +1680,7 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
       const onlineOpen = !!(onlinePanelEl && onlinePanelEl.style.display !== 'none');
       if (signalBarEl) {
-        signalBarEl.style.display = (signalBarOpen && !(isMobile && onlineOpen)) ? 'flex' : 'none';
+        signalBarEl.style.display = (isMobile && onlineOpen) ? 'none' : 'flex';
         signalBarEl.style.right = isMobile ? '8px' : '16px';
         signalBarEl.style.left = 'auto';
         signalBarEl.style.transform = 'none';
@@ -2887,26 +2829,6 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     AudioFX.click();
     openSupport('donate');
   });
-  bindTap(btnContracts, async () => {
-    await AudioFX.unlock();
-    AudioFX.click();
-    openContracts();
-  });
-
-  bindTap(btnSignals, async () => {
-    await AudioFX.unlock();
-    AudioFX.click();
-    signalBarOpen = !signalBarOpen;
-    syncUiLayers();
-  });
-
-  bindTap(contractsCloseEl, async () => {
-    await AudioFX.unlock();
-    AudioFX.click();
-    closeContracts();
-  });
-
-  if (contractsModalEl) contractsModalEl.addEventListener('click', (e) => { if (e.target === contractsModalEl) closeContracts(); });
 
   bindTap(btnFooterSupport, async () => {
     await AudioFX.unlock();
@@ -2930,32 +2852,24 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     await AudioFX.unlock();
     AudioFX.click();
     sendQuickSignal('hello');
-    signalBarOpen = false;
-    syncUiLayers();
   });
 
   bindTap(sigWarnEl, async () => {
     await AudioFX.unlock();
     AudioFX.click();
     sendQuickSignal('warn');
-    signalBarOpen = false;
-    syncUiLayers();
   });
 
   bindTap(sigPortalEl, async () => {
     await AudioFX.unlock();
     AudioFX.click();
     sendQuickSignal('portal');
-    signalBarOpen = false;
-    syncUiLayers();
   });
 
   bindTap(sigHelpEl, async () => {
     await AudioFX.unlock();
     AudioFX.click();
     sendQuickSignal('help');
-    signalBarOpen = false;
-    syncUiLayers();
   });
 
   bindTap(onlineSaveBtn, async () => {
@@ -2999,9 +2913,6 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     elLv.parentElement && (elLv.parentElement.title = 'Текущий уровень');
     elBest.parentElement && (elBest.parentElement.title = elBest.title || 'Личный рекорд');
     if (netPlayersListEl) netPlayersListEl.title = 'Онлайн-игроки, отсортированные по размеру';
-    updateShardsUI();
-    renderContracts();
-    updateLeaderUi();
   }
 
   
@@ -4802,7 +4713,6 @@ function drawCoin(x,y,r) {
     AudioFX.relic();
     // short flash pulse
     player.echoPulse = Math.max(player.echoPulse, 0.25);
-    pushEvent(`Реликвия: ${type}`, "🗿");
     updateHUD();
   }
 
@@ -4976,15 +4886,12 @@ function drawCoin(x,y,r) {
       player.score += extractBonus;
       player.coins += EXTRACT_COIN_BONUS;
       player.extracted = true;
-      const shardGain = 10 + player.relics.length * 2 + Math.min(10, Math.floor(timeSurv / 60));
-      addShards(shardGain, "Экстракция");
-      pushEvent(`Экстракция: +${extractBonus} очк.`, "🚪");
       state = 'DEAD';
       overlay.style.display = 'flex';
       syncUiLayers();
       overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
       overlay.querySelectorAll('p')[0].innerHTML = `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
-      overlay.querySelectorAll('p')[1].innerHTML = `Экстракционный бонус: <b>+${extractBonus}</b> очков, <b>+${EXTRACT_COIN_BONUS}</b> монет и <b>+${shardGain}</b> осколков.`;
+      overlay.querySelectorAll('p')[1].innerHTML = `Экстракционный бонус: <b>+${extractBonus}</b> очков и <b>+${EXTRACT_COIN_BONUS}</b> монет. Результат отправлен в таблицу лидеров.`;
       overlay.querySelectorAll('p')[2].innerHTML = `Победа отмечена как <b>✅ экстракция</b>. Нажми <b>Заново</b>, чтобы начать новый забег.`;
       btnStart.textContent = 'Заново';
       onlineSubmitResult(true).then(()=>onlineRefresh());
