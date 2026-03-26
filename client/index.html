@@ -366,7 +366,7 @@
   <ol id="onlineTop" style="margin:10px 0 0 18px; padding:0; max-height:260px; overflow:auto;"></ol>
 
   <div style="margin-top:10px; font-size:11px; opacity:.65;">
-    Глобальный TOP 20 и личные рекорды хранятся на сервере и доступны после перезагрузки.
+    Глобальный TOP 20 и личные рекорды хранятся в D1 и доступны после перезагрузки.
   </div>
 </div>
 
@@ -1732,12 +1732,11 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
 
     if (mobileUi) {
       const isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 900;
-      const onlineOpen = !!(onlinePanelEl && onlinePanelEl.style.display !== 'none');
-      const blockMobileUi = activeModal || (isMobile && onlineOpen);
-      mobileUi.style.display = (isMobile && !blockMobileUi) ? 'block' : 'none';
-      mobileUi.style.pointerEvents = blockMobileUi ? 'none' : '';
-      mobileUi.setAttribute('aria-hidden', blockMobileUi ? 'true' : 'false');
+      mobileUi.style.display = (isMobile && !activeModal) ? 'block' : 'none';
+      mobileUi.style.pointerEvents = activeModal ? 'none' : '';
+      mobileUi.setAttribute('aria-hidden', activeModal ? 'true' : 'false');
 
+      const onlineOpen = !!(onlinePanelEl && onlinePanelEl.style.display !== 'none');
       if (signalBarEl) {
         signalBarEl.style.display = (signalBarOpen && !(isMobile && onlineOpen)) ? 'flex' : 'none';
         signalBarEl.style.right = isMobile ? '8px' : '16px';
@@ -2205,16 +2204,6 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     hasPointer = false;
     mouseX = W/2;
     mouseY = H/2;
-  }
-
-  function updatePointerFromClient(clientX, clientY) {
-    if (!pointerInsideGame(clientX, clientY)) {
-      resetPointerToCenter();
-      return;
-    }
-    hasPointer = true;
-    mouseX = clientX * DPR;
-    mouseY = clientY * DPR;
   }
 
   function pointerInsideGame(clientX, clientY) {
@@ -2760,50 +2749,31 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     syncUiLayers();
   }
 
+  btnRestart.addEventListener('click', ()=>{
+    if (state === 'DEAD' && requestServerRespawn()) return;
+    overlay.style.display = 'none';
+    syncUiLayers();
+    state = 'RUN';
+    resetGame();
+  });
+  btnPause.addEventListener('click', ()=>{
+    if (state === 'RUN' || state === 'PAUSE') togglePause();
+  });
+
+
   function bindTap(el, handler){
     if (!el || !handler) return;
-
     let lastFire = 0;
-    let lastPointerLikeAt = 0;
-
-    const invoke = (e) => {
+    const fire = (e) => {
       const now = Date.now();
-      if (now - lastFire < 420) return;
+      if (now - lastFire < 260) return;
       lastFire = now;
       try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_) {}
       handler(e);
     };
-
-    const onPointerDown = (e) => {
-      if (e && e.pointerType === 'mouse' && e.button !== 0) return;
-      lastPointerLikeAt = Date.now();
-      invoke(e);
-    };
-
-    const onTouchStart = (e) => {
-      lastPointerLikeAt = Date.now();
-      invoke(e);
-    };
-
-    const onClick = (e) => {
-      const now = Date.now();
-      if (now - lastPointerLikeAt < 650) {
-        try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_) {}
-        return;
-      }
-      invoke(e);
-    };
-
-    const onKeyDown = (e) => {
-      if (!e) return;
-      if (e.key === 'Enter' || e.key === ' ') invoke(e);
-    };
-
-    if (window.PointerEvent) el.addEventListener('pointerdown', onPointerDown, { passive:false });
-    else el.addEventListener('touchstart', onTouchStart, { passive:false });
-
-    el.addEventListener('click', onClick, { passive:false });
-    el.addEventListener('keydown', onKeyDown, { passive:false });
+    el.addEventListener('touchstart', fire, { passive:false });
+    el.addEventListener('pointerdown', fire, { passive:false });
+    el.addEventListener('click', fire, { passive:false });
   }
 
 
@@ -2871,14 +2841,10 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     btnSoundEl.textContent = sfxOn ? '🔊' : '🔈';
   }
 	
-  function toggleTopPanel(forceOpen = null){
+  function toggleTopPanel(){
     if (!onlinePanelEl) return;
-    const nextOpen = (forceOpen == null)
-      ? (onlinePanelEl.style.display === 'none' || onlinePanelEl.style.display === '')
-      : !!forceOpen;
-    onlinePanelEl.style.display = nextOpen ? 'block' : 'none';
-    layoutFloatingPanels();
-    syncUiLayers();
+    const cur = onlinePanelEl.style.display;
+    onlinePanelEl.style.display = (cur === 'none' || cur === '') ? 'block' : 'none';
   }
 
   bindTap(document.getElementById("btnTop"), async () => {
