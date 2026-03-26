@@ -289,6 +289,17 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (pathname === '/api/mebest' && req.method === 'GET') {
+    return sendJson(res, 200, {
+      row: getPersonalBest(
+        url.searchParams.get('seed'),
+        url.searchParams.get('mode'),
+        url.searchParams.get('name'),
+        url.searchParams.get('scope') || 'seed'
+      ),
+    });
+  }
+
   if (pathname === '/api/submit' && req.method === 'POST') {
     try {
       const raw = await readBody(req);
