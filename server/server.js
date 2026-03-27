@@ -289,17 +289,6 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  if (pathname === '/api/mebest' && req.method === 'GET') {
-    return sendJson(res, 200, {
-      row: getPersonalBest(
-        url.searchParams.get('seed'),
-        url.searchParams.get('mode'),
-        url.searchParams.get('name'),
-        url.searchParams.get('scope') || 'seed'
-      ),
-    });
-  }
-
   if (pathname === '/api/submit' && req.method === 'POST') {
     try {
       const raw = await readBody(req);
@@ -409,25 +398,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-
-    if (msg.type === 'signal') {
-      const room = rooms.get(ws.player.room);
-      if (!room) return;
-      const payload = JSON.stringify({
-        type: 'signal',
-        kind: String(msg.kind || 'hello').slice(0,16),
-        id: ws.player.id,
-        name: ws.player.name,
-        x: clamp(Number(msg.x) || 0, -1000000, 1000000),
-        y: clamp(Number(msg.y) || 0, -1000000, 1000000),
-        color: ws.player.color || '#79C8FF',
-        ts: Date.now(),
-      });
-      for (const p of room.players.values()) {
-        if (p.ws && p.ws.readyState === 1) p.ws.send(payload);
-      }
-      return;
-    }
     if (msg.type === 'ping') {
       if (typeof msg.name === 'string' && msg.name.trim()) {
         ws.player.name = sanitizeName(msg.name);
