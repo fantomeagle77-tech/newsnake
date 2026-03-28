@@ -15,7 +15,7 @@ export async function onRequestGet({ env, request }) {
   let stmt;
   if (scope === "all") {
     stmt = env.DB.prepare(
-      `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, s.seed, COALESCE(s.extracted, 0) AS extracted
+      `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, s.seed, 0 AS extracted
        FROM scores s
        WHERE s.mode = ?
          AND NOT EXISTS (
@@ -27,16 +27,15 @@ export async function onRequestGet({ env, request }) {
                s2.score > s.score
                OR (s2.score = s.score AND s2.time_ms > s.time_ms)
                OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins > s.coins)
-               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) > COALESCE(s.extracted,0))
-               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) = COALESCE(s.extracted,0) AND s2.created_at > s.created_at)
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND s2.created_at > s.created_at)
              )
          )
-       ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, COALESCE(s.extracted,0) DESC, s.created_at DESC
+       ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, s.created_at DESC
        LIMIT ?`
     ).bind(mode, limit);
   } else {
     stmt = env.DB.prepare(
-      `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, s.seed, COALESCE(s.extracted, 0) AS extracted
+      `SELECT s.name, s.score, s.time_ms, s.coins, s.created_at, s.seed, 0 AS extracted
        FROM scores s
        WHERE s.seed = ? AND s.mode = ?
          AND NOT EXISTS (
@@ -49,11 +48,10 @@ export async function onRequestGet({ env, request }) {
                s2.score > s.score
                OR (s2.score = s.score AND s2.time_ms > s.time_ms)
                OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins > s.coins)
-               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) > COALESCE(s.extracted,0))
-               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND COALESCE(s2.extracted,0) = COALESCE(s.extracted,0) AND s2.created_at > s.created_at)
+               OR (s2.score = s.score AND s2.time_ms = s.time_ms AND s2.coins = s.coins AND s2.created_at > s.created_at)
              )
          )
-       ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, COALESCE(s.extracted,0) DESC, s.created_at DESC
+       ORDER BY s.score DESC, s.time_ms DESC, s.coins DESC, s.created_at DESC
        LIMIT ?`
     ).bind(seed, mode, limit);
   }

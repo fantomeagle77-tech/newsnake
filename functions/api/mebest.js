@@ -15,18 +15,18 @@ export async function onRequestGet({ env, request }) {
   let row;
   if (scope === "all") {
     row = await env.DB.prepare(
-      `SELECT name, score, time_ms, coins, created_at, seed, COALESCE(extracted, 0) AS extracted
+      `SELECT name, score, time_ms, coins, created_at, seed, 0 AS extracted
        FROM scores
        WHERE mode = ? AND name = ?
-       ORDER BY score DESC, time_ms DESC, coins DESC, COALESCE(extracted,0) DESC, created_at DESC
+       ORDER BY score DESC, time_ms DESC, coins DESC, created_at DESC
        LIMIT 1`
     ).bind(mode, name).first();
   } else {
     row = await env.DB.prepare(
-      `SELECT name, score, time_ms, coins, created_at, seed, COALESCE(extracted, 0) AS extracted
+      `SELECT name, score, time_ms, coins, created_at, seed, 0 AS extracted
        FROM scores
        WHERE seed = ? AND mode = ? AND name = ?
-       ORDER BY score DESC, time_ms DESC, coins DESC, COALESCE(extracted,0) DESC, created_at DESC
+       ORDER BY score DESC, time_ms DESC, coins DESC, created_at DESC
        LIMIT 1`
     ).bind(seed, mode, name).first();
   }
