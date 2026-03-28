@@ -254,6 +254,20 @@
       }
     }
 
+
+    #guideModal{position:fixed;inset:0;z-index:10036;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.68);backdrop-filter:blur(8px);} 
+    #guideModal .box{width:min(94vw,760px);max-height:min(88vh,820px);overflow:auto;border-radius:24px;padding:22px;background:rgba(8,12,24,.94);border:1px solid rgba(90,140,255,.18);box-shadow:0 20px 80px rgba(0,0,0,.45);color:#EAF1FF;}
+    #guideModal .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px;}
+    #guideModal .g{padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);line-height:1.45;}
+    #guideModal .g b{display:block;margin-bottom:6px;font-size:15px;}
+    #guideModal .meta{margin-top:14px;padding:12px 14px;border-radius:16px;background:rgba(80,120,255,.10);border:1px solid rgba(120,160,255,.18);font-size:13px;line-height:1.45;}
+    #toastStack{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);z-index:10034;display:flex;flex-direction:column;gap:8px;pointer-events:none;align-items:center;}
+    .toast{min-width:min(84vw,420px);max-width:min(92vw,520px);padding:10px 14px;border-radius:999px;background:rgba(8,12,24,.86);border:1px solid rgba(90,140,255,.16);color:#EAF1FF;backdrop-filter:blur(12px);box-shadow:0 12px 30px rgba(0,0,0,.32);font-size:13px;line-height:1.35;opacity:0;transform:translateY(10px) scale(.98);transition:opacity .18s ease, transform .18s ease;}
+    .toast.show{opacity:1;transform:translateY(0) scale(1);}
+    .toast strong{color:#fff;}
+    body.mobile-ui #toastStack{bottom:calc(env(safe-area-inset-bottom,0px) + 146px);} 
+    @media (max-width:900px){#guideModal .grid{grid-template-columns:1fr;} #guideModal .box{padding:18px;} }
+
 </style>
 </head>
 <body>
@@ -272,6 +286,8 @@
     <div class="pill" title="Щит спасает от одного удара"><span>🛡️ <span class="k">Щит</span></span> <b id="shield">0</b></div>
     <div class="pill" title="Текущий уровень сложности"><span>Lv <span class="k">Уровень</span></span> <b id="lv">1</b></div>
     <div class="pill" title="Лучшее время выживания на этом устройстве"><span>🏆 <span class="k">Лучшее</span></span> <b id="best">0.0s</b></div>
+    <div class="pill" title="Осколки: выдаются за успешную экстракцию"><span>🧩 <span class="k">Осколки</span></span> <b id="shards">0</b></div>
+	<button class="btn" id="btnGuide" title="Как играть">❔</button>
 	<button class="btn" id="btnSound" title="Звук">🔊</button>
 	<button class="btn" id="btnPrevTrack" title="Предыдущий трек">⏮</button>
 	<button class="btn" id="btnMusic" title="Музыка">🎵</button>
@@ -288,7 +304,7 @@
   
 <div class="hint">
   <div class="card">🖱️ Веди курсор — шар догоняет с инерцией. SPACE: рывок (кд). Q / 🪙: сброс массы. ✨ Очки идут в лидеры, 🪙 монеты дают рост.</div>
-  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Собери 3 реликвии → откроется 🚪 портал. Зелёный ободок = можно съесть, красный = опасно.</div>
+  <div class="card">🌑 Туман: видимость уменьшается с уровнем. Собери 3 реликвии → откроется 🚪 портал. Успешная экстракция даёт бонус к очкам и 🧩 осколки.</div>
 </div>
 
 <div id="netMini" style="
@@ -307,6 +323,8 @@
   <div id="netPlayersList" style="font-size:12px; opacity:.86; margin-top:8px; line-height:1.45;">
     ты один
   </div>
+  <div id="missionLine" style="font-size:12px; opacity:.84; margin-top:8px; border-top:1px solid rgba(255,255,255,.08); padding-top:8px;">🚪 Цель: 3 реликвии → портал → экстракция</div>
+  <div id="synergyLine" style="font-size:12px; opacity:.82; margin-top:6px;">🧪 Синергия: —</div>
   <div style="display:flex; gap:8px; margin-top:10px;">
     <button class="btn" id="netRenameBtn" style="padding:8px 12px; font-size:12px;">Ник</button>
   </div>
@@ -457,14 +475,35 @@
 <div class="centerMsg" id="overlay">
   <div class="box">
     <h2>Void Run — бесконечный мир</h2>
-    <p>Собирай <b>монеты</b>, избегай <b>мин</b>. Мир бесконечный по X/Y — нет границ.</p>
-    <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет (и чуть мешает манёвру).</p>
-    <p>Нажми <b>Старт</b>. Сетевой режим — по одному адресу с одинаковыми room и seed.</p>
+    <p>Собирай <b>монеты</b>, избегай <b>мин</b> и крупных угроз. Мир бесконечный по X/Y — нет границ.</p>
+    <p><b>Хвост</b> растёт от монет, но если мина коснётся хвоста — сегменты оторвутся. <b>Размер</b> шара растёт от монет и делает тебя сильнее, но чуть хуже в манёвре.</p>
+    <p><b>Экспедиция:</b> собери <b>3 реликвии</b> → откроется <b>портал</b> → дойди до него и проведи <b>экстракцию</b>. Успешная экстракция даёт бонус к очкам и <b>🧩 осколки</b>.</p>
     <div class="row">
+      <button class="btn" id="guideOpenStart">Как это работает</button>
       <button class="btn" id="start">Старт</button>
     </div>
   </div>
 </div>
+
+<div id="guideModal">
+  <div class="box">
+    <h2 style="margin:0 0 6px;">Как устроен забег</h2>
+    <div class="grid">
+      <div class="g"><b>🪙 Монеты</b>Монеты растят шар и хвост. Чем ты крупнее, тем легче давить мелких, но тем сложнее резко менять направление.</div>
+      <div class="g"><b>🗿 Реликвии</b>Каждая реликвия усиливает один модификатор: луч, ауру, магнит, эхо или анти-замедление. После 3 реликвий открывается портал.</div>
+      <div class="g"><b>🚪 Экстракция</b>Когда портал открыт, дойди до него живым. Экстракция даёт бонус к очкам, монетам и осколкам, а забег фиксируется как успешный.</div>
+      <div class="g"><b>🧩 Осколки</b>Осколки — это награда за успешную экстракцию. Они копятся локально и помогают видеть ценность удачных забегов.</div>
+      <div class="g"><b>⚠️ Угрозы</b>Мины режут хвост и бьют по HP. Хантеры охотятся активнее в лаве и токсике. Вирусы и мимики не для фарма — обходи их.</div>
+      <div class="g"><b>💡 Подсказка</b>Пока маленький — кормишься на монетах и мелких целях. Крупным становишься только если успеваешь выходить из опасных зон.</div>
+    </div>
+    <div class="meta" id="guideSynergyList">Синергии: beam + aura → Nova Beam • magnet + echo → Tracker • anti + beam → Crusher • anti + aura → Shell • magnet + aura → Vacuum</div>
+    <div class="row">
+      <button class="btn" id="guideClose">Понятно</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastStack"></div>
 
 <script>
 (() => {
@@ -835,6 +874,15 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   const btnFooterSupport = document.getElementById('btnFooterSupport');
   const btnContact = document.getElementById('btnContact');
   const btnBug = document.getElementById('btnBug');
+  const btnGuide = document.getElementById('btnGuide');
+  const elShards = document.getElementById('shards');
+  const missionLineEl = document.getElementById('missionLine');
+  const synergyLineEl = document.getElementById('synergyLine');
+  const guideModalEl = document.getElementById('guideModal');
+  const guideCloseEl = document.getElementById('guideClose');
+  const guideOpenStartEl = document.getElementById('guideOpenStart');
+  const guideSynergyListEl = document.getElementById('guideSynergyList');
+  const toastStackEl = document.getElementById('toastStack');
   const signalBarEl = document.getElementById('signalBar');
   const sigHelloEl = document.getElementById('sigHello');
   const sigWarnEl = document.getElementById('sigWarn');
@@ -856,6 +904,75 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
   if (bestRowLocal) {
     elBest.title = `Личный рекорд: очки ${bestRowLocal.score|0} • время ${(Number(bestRowLocal.time_ms||0)/1000).toFixed(1)}s • монеты ${bestRowLocal.coins|0} • экстракция ${bestRowLocal.extracted ? '✅' : '—'}`;
   }
+
+  const LS_SHARDS = 'voidrun_shards_v1';
+  const LS_GUIDE_SEEN = 'voidrun_guide_seen_v1';
+  let shards = Math.max(0, Number(localStorage.getItem(LS_SHARDS) || '0') || 0);
+  let firstRunBriefingDone = false;
+
+  function saveShards(){ localStorage.setItem(LS_SHARDS, String(shards|0)); }
+  function updateShardsUI(){ if (elShards) elShards.textContent = String(shards|0); }
+  function relicLabel(type){ return ({beam:'Луч', aura:'Аура', magnet:'Магнит', echo:'Эхо', anti:'Анти-замедление'})[type] || 'Реликвия'; }
+  function relicEffectText(type){
+    return ({
+      beam:'дальше видимость и луч фонаря',
+      aura:'шире безопасная аура вокруг шара',
+      magnet:'лучше притягиваются монеты',
+      echo:'чаще импульс-подсветка опасностей',
+      anti:'меньше теряешь скорость в плохих зонах'
+    })[type] || 'даёт усиление на забег';
+  }
+  function currentSynergy(){
+    const set = new Set(player.relics || []);
+    if(set.has('beam') && set.has('aura')) return 'Nova Beam';
+    if(set.has('magnet') && set.has('echo')) return 'Tracker';
+    if(set.has('anti') && set.has('beam')) return 'Crusher';
+    if(set.has('anti') && set.has('aura')) return 'Shell';
+    if(set.has('magnet') && set.has('aura')) return 'Vacuum';
+    return '—';
+  }
+  function addShards(amount, reason=''){
+    amount = Math.max(0, amount|0);
+    if (!amount) return;
+    shards += amount;
+    saveShards();
+    updateShardsUI();
+    pushToast(`${reason ? reason + ' • ' : ''}+${amount} осколков`, '🧩');
+  }
+  function updateMetaLines(){
+    if (missionLineEl) {
+      if (player.extracted) missionLineEl.textContent = '🚪 Экстракция завершена — забег зафиксирован';
+      else if (portal) missionLineEl.textContent = `🚪 Портал открыт • до него ${Math.round(portalDistanceWorld())} • осталось ${Math.ceil(portalTimeLeftMs()/1000)}с`;
+      else missionLineEl.textContent = `🚪 Цель: ${player.relics.length}/${RELIC_GOAL} реликвии → портал → экстракция`;
+    }
+    if (synergyLineEl) synergyLineEl.textContent = `🧪 Синергия: ${currentSynergy()}`;
+    if (guideSynergyListEl) guideSynergyListEl.innerHTML = 'Синергии: beam + aura → Nova Beam • magnet + echo → Tracker • anti + beam → Crusher • anti + aura → Shell • magnet + aura → Vacuum';
+  }
+  function pushToast(text, icon='ℹ️'){
+    if (!toastStackEl) return;
+    const item = document.createElement('div');
+    item.className = 'toast';
+    item.innerHTML = `<strong>${icon}</strong> ${text}`;
+    toastStackEl.appendChild(item);
+    requestAnimationFrame(() => item.classList.add('show'));
+    setTimeout(() => item.classList.remove('show'), 2600);
+    setTimeout(() => { try { item.remove(); } catch(_){} }, 2900);
+  }
+  function openGuide(){ if (guideModalEl) { guideModalEl.style.display = 'flex'; updateMetaLines(); syncUiLayers(); } }
+  function closeGuide(){ if (guideModalEl) { guideModalEl.style.display = 'none'; syncUiLayers(); } }
+  function maybeOpenGuideOnce(){
+    if ((localStorage.getItem(LS_GUIDE_SEEN) || '0') === '1') return;
+    localStorage.setItem(LS_GUIDE_SEEN, '1');
+    openGuide();
+  }
+  function runFirstRunBriefing(){
+    if (firstRunBriefingDone) return;
+    firstRunBriefingDone = true;
+    setTimeout(() => pushToast('Монеты растят шар и хвост', '🪙'), 120);
+    setTimeout(() => pushToast('Собери 3 реликвии, чтобы открыть портал', '🗿'), 980);
+    setTimeout(() => pushToast('Экстракция даёт бонус к очкам и осколки', '🚪'), 1840);
+  }
+  updateShardsUI();
 
   // ==========================
   // Utils
@@ -1654,10 +1771,12 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     const nickGate = document.getElementById('nickGate');
     const overlayEl = document.getElementById('overlay');
     const supportModal = document.getElementById('supportModal');
+    const guideModal = document.getElementById('guideModal');
     const overlayOpen = !!(overlayEl && overlayEl.style.display !== 'none');
     const nickGateOpen = !!(nickGate && nickGate.style.display !== 'none');
     const supportOpen = !!(supportModal && supportModal.style.display !== 'none');
-    const activeModal = nickGateOpen || overlayOpen || supportOpen;
+    const guideOpen = !!(guideModal && guideModal.style.display !== 'none');
+    const activeModal = nickGateOpen || overlayOpen || supportOpen || guideOpen;
 
     if (overlayEl) {
       overlayEl.style.zIndex = '10030';
@@ -1670,6 +1789,10 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     if (supportModal) {
       supportModal.style.zIndex = '10035';
       supportModal.style.pointerEvents = supportOpen ? 'auto' : 'none';
+    }
+    if (guideModal) {
+      guideModal.style.zIndex = '10036';
+      guideModal.style.pointerEvents = guideOpen ? 'auto' : 'none';
     }
 
     if (mobileUi) {
@@ -2371,9 +2494,9 @@ const netRenameBtnEl = document.getElementById('netRenameBtn');
     }
 
     // hunters / predators (multiple kinds)
-    const hunterP = (biome === 'lava') ? 0.52 : (biome === 'toxic' ? 0.36 : 0.30);
+    const hunterP = (biome === 'lava') ? 0.38 : (biome === 'toxic' ? 0.28 : 0.22);
     if (level >= 2 && rnd() < hunterP) {
-      const count = 1 + (rnd() < 0.22 ? 1 : 0);
+      const count = 1 + (rnd() < 0.12 ? 1 : 0);
       for (let i=0;i<count;i++){
         const x = baseX + rnd()*CHUNK;
         const y = baseY + rnd()*CHUNK;
@@ -2687,6 +2810,7 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
 
     onlineGhostReset();
     updateHUD();
+    updateMetaLines();
     if (typeof layoutFloatingPanels === 'function') layoutFloatingPanels();
     syncUiLayers();
   }
@@ -2733,6 +2857,8 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     syncUiLayers();
     state = 'RUN';
     resetGame();
+    maybeOpenGuideOnce();
+    runFirstRunBriefing();
   }
 
   bindTap(btnStart, handleStartAction);
@@ -2794,6 +2920,25 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     AudioFX.click();
     toggleTopPanel();
   });
+
+  bindTap(btnGuide, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openGuide();
+  });
+
+  bindTap(guideOpenStartEl, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    openGuide();
+  });
+
+  bindTap(guideCloseEl, async () => {
+    await AudioFX.unlock();
+    AudioFX.click();
+    closeGuide();
+  });
+  if (guideModalEl) guideModalEl.addEventListener('click', (e) => { if (e.target === guideModalEl) closeGuide(); });
 
   bindTap(document.getElementById("btnEject"), async () => {
     await AudioFX.unlock();
@@ -2913,6 +3058,8 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
     elLv.parentElement && (elLv.parentElement.title = 'Текущий уровень');
     elBest.parentElement && (elBest.parentElement.title = elBest.title || 'Личный рекорд');
     if (netPlayersListEl) netPlayersListEl.title = 'Онлайн-игроки, отсортированные по размеру';
+    updateShardsUI();
+    updateMetaLines();
   }
 
   
@@ -3438,6 +3585,41 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
   // ==========================
   // World update / collisions
   // ==========================
+
+
+  function hazardAvoidance(ent, ch, safeMul = 1) {
+    let ax = 0, ay = 0;
+    if (ch && ch.mines) {
+      for (const m of ch.mines) {
+        if (collected.has(m.id)) continue;
+        const dx = ent.x - m.x;
+        const dy = ent.y - m.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const safe = ent.r + m.r + 78 * safeMul;
+        if (d < safe) {
+          const push = (1 - d / safe) * 220;
+          ax += (dx / d) * push;
+          ay += (dy / d) * push;
+        }
+      }
+    }
+    if (ch && ch.viruses) {
+      for (const v of ch.viruses) {
+        if (collected.has(v.id)) continue;
+        const dx = ent.x - v.x;
+        const dy = ent.y - v.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const safe = ent.r + v.r + 54 * safeMul;
+        if (d < safe) {
+          const push = (1 - d / safe) * 160;
+          ax += (dx / d) * push;
+          ay += (dy / d) * push;
+        }
+      }
+    }
+    return { ax, ay };
+  }
+
   function stepWorld(dt) {
     const viewW = (W / DPR);
     const viewH = (H / DPR);
@@ -3585,20 +3767,22 @@ c = {biome, coins, mines, torches, reveals, heals, shields, relics, mimics, viru
           const hx = player.x - m.x;
           const hy = player.y - m.y;
           const hd = Math.hypot(hx, hy) || 1;
-          if (hd < 520) {
-            const hunt = clamp(18 + (level-10)*0.8, 18, 32);
+          if (hd < 460) {
+            const hunt = clamp(14 + (level-10)*0.6, 14, 24);
             m.x += (hx/hd) * hunt * dt;
             m.y += (hy/hd) * hunt * dt;
           }
         } else if (m.seekCd <= 0) {
-          m.seekT = 1.2;
-          m.seekCd = 3.0 + Math.random()*2.0;
+          m.warn = 0.55;
+          m.seekT = 0.85;
+          m.seekCd = 4.2 + Math.random()*2.4;
         }
       }
 
           // Near miss bonus (adrenaline)
           const near = (player.r + mr + 22);
           const near2 = near*near;
+          if (m.warn > 0) m.warn = Math.max(0, m.warn - dt);
           const d2 = dist2(player.x, player.y, mx, my);
           if (d2 < near2 && d2 > (player.r + mr + 4) ** 2) {
             player.nearMiss += dt * 1.6;
@@ -3895,23 +4079,27 @@ if (ch.hunters) {
     } else if (h.kind === 'charger') {
       if (h.charge > 0) {
         // charging burst
-        const sp = 360;
+        const sp = 320;
         vx = (h.dirx || (dx/d)) * sp;
         vy = (h.diry || (dy/d)) * sp;
-      } else if (d < 620 && h.cd <= 0) {
+      } else if (d < 520 && h.cd <= 0) {
         // start charge
         h.dirx = dx/d;
         h.diry = dy/d;
-        h.charge = 0.32;
-        h.cd = 3.0;
+        h.charge = 0.24;
+        h.cd = 3.8;
         kickShake(4, 0.06);
-      } else if (d < 700) {
+      } else if (d < 620) {
         // mild chase between charges
-        const chase = 62 + level*2.0;
+        const chase = 56 + level*1.7;
         vx += (dx/d) * chase;
         vy += (dy/d) * chase;
       }
     }
+
+    const avoid = hazardAvoidance(h, ch, h.kind === 'charger' ? 1.18 : 1.0);
+    vx += avoid.ax;
+    vy += avoid.ay;
 
     // move
     h.x += vx * dt;
@@ -4058,7 +4246,7 @@ if (ch.hunters) {
     syncUiLayers();
       overlay.querySelector('h2').textContent = 'Поражение 😵';
       overlay.querySelectorAll('p')[0].innerHTML = `Время: <b>${timeSurv.toFixed(1)}s</b> • Монеты: <b>${player.coins}</b> • Уровень: <b>${level}</b>`;
-      overlay.querySelectorAll('p')[1].innerHTML = `Совет: кормись на мелких, избегай крупных. В темноте встречаются "хищники" и "вирусы". SPACE — рывок.`;
+      overlay.querySelectorAll('p')[1].innerHTML = `Совет: сначала кормись на мелких, не дави в лаву без запаса. Собери 3 реликвии, открой портал и экстрагируйся. Кнопка <b>❔</b> сверху открывает памятку.`;
       overlay.querySelectorAll('p')[2].innerHTML = `Нажми <b>Старт</b>, чтобы сразу начать заново.`;
       overlay.querySelector('#start').textContent = 'Старт';
     }
@@ -4298,7 +4486,7 @@ function pathFlashlightBeamMask(px, py, ang, startR, len, endR) {
         const x = sx(mx), y = sy(my);
         if (x<-120 || y<-120 || x>W+120 || y>H+120) continue;
         const mineScaleLocalR = (m.kind === 'heavy') ? lerp(1.0, 0.78, clamp((sizeRatioR - 1) / 6, 0, 1)) : mineScaleR;
-        drawMine(x,y,m.r * mineScaleLocalR);
+        drawMine(x,y,m.r * mineScaleLocalR, m.warn || 0, m.kind || 'wobble');
       }
 // agar-style cells
 if (ch.cells) {
@@ -4713,6 +4901,9 @@ function drawCoin(x,y,r) {
     AudioFX.relic();
     // short flash pulse
     player.echoPulse = Math.max(player.echoPulse, 0.25);
+    pushToast(`${relicLabel(type)}: ${relicEffectText(type)}`, '🗿');
+    const syn = currentSynergy();
+    if (syn !== '—') pushToast(`Активна синергия ${syn}`, '🧪');
     updateHUD();
   }
 
@@ -4886,12 +5077,14 @@ function drawCoin(x,y,r) {
       player.score += extractBonus;
       player.coins += EXTRACT_COIN_BONUS;
       player.extracted = true;
+      const shardGain = 6 + player.relics.length * 2 + Math.min(8, Math.floor(timeSurv / 75));
+      addShards(shardGain, 'Экстракция');
       state = 'DEAD';
       overlay.style.display = 'flex';
       syncUiLayers();
       overlay.querySelector('h2').textContent = 'ЭКСТРАКЦИЯ ✅';
       overlay.querySelectorAll('p')[0].innerHTML = `Реликвии: <b>${player.relics.length}</b> • Монеты: <b>${player.coins}</b> • Время: <b>${timeSurv.toFixed(1)}s</b>`;
-      overlay.querySelectorAll('p')[1].innerHTML = `Экстракционный бонус: <b>+${extractBonus}</b> очков и <b>+${EXTRACT_COIN_BONUS}</b> монет. Результат отправлен в таблицу лидеров.`;
+      overlay.querySelectorAll('p')[1].innerHTML = `Экстракционный бонус: <b>+${extractBonus}</b> очков, <b>+${EXTRACT_COIN_BONUS}</b> монет и <b>+${shardGain}</b> осколков. Результат отправлен в таблицу лидеров.`;
       overlay.querySelectorAll('p')[2].innerHTML = `Победа отмечена как <b>✅ экстракция</b>. Нажми <b>Заново</b>, чтобы начать новый забег.`;
       btnStart.textContent = 'Заново';
       onlineSubmitResult(true).then(()=>onlineRefresh());
@@ -4900,24 +5093,38 @@ function drawCoin(x,y,r) {
     return false;
   }
 
-  function drawMine(x,y,r) {
+  function drawMine(x,y,r,warn=0,kind='wobble') {
     ctx.save();
-    // danger glow
+    if (warn > 0) {
+      const pulseR = r * (2.25 + 0.28 * Math.sin(performance.now() * 0.022));
+      const pulse = ctx.createRadialGradient(x,y,1, x,y, pulseR);
+      pulse.addColorStop(0, 'rgba(255,210,90,0.20)');
+      pulse.addColorStop(1, 'rgba(255,210,90,0)');
+      ctx.fillStyle = pulse;
+      ctx.beginPath(); ctx.arc(x,y,pulseR,0,TAU); ctx.fill();
+    }
+
     const glow = ctx.createRadialGradient(x,y,1, x,y, r*3.0);
-    glow.addColorStop(0, 'rgba(255,60,120,0.40)');
+    glow.addColorStop(0, kind === 'heavy' ? 'rgba(255,150,80,0.36)' : 'rgba(255,60,120,0.40)');
     glow.addColorStop(1, 'rgba(255,60,120,0)');
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.arc(x,y,r*3,0,TAU); ctx.fill();
 
-    // body
     const g = ctx.createLinearGradient(x-r,y-r,x+r,y+r);
-    g.addColorStop(0,'#FF3C7A');
-    g.addColorStop(1,'#B10C3F');
+    if (kind === 'heavy') {
+      g.addColorStop(0,'#FF9A44');
+      g.addColorStop(1,'#9A3A04');
+    } else if (kind === 'seeker') {
+      g.addColorStop(0,'#FF5E7A');
+      g.addColorStop(1,'#7A1632');
+    } else {
+      g.addColorStop(0,'#FF3C7A');
+      g.addColorStop(1,'#B10C3F');
+    }
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
 
-    // spikes
-    ctx.strokeStyle = 'rgba(255,170,200,0.8)';
+    ctx.strokeStyle = warn > 0 ? 'rgba(255,235,180,0.95)' : 'rgba(255,170,200,0.8)';
     ctx.lineWidth = 3*DPR;
     for (let i=0;i<10;i++){
       const a = (i/10)*TAU;
