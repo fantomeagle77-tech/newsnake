@@ -7,6 +7,7 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = path.join(__dirname, '..', 'client');
+const PAGES_API_BASE = (process.env.PAGES_API_BASE || 'https://newsnake-a8b.pages.dev').replace(/\/$/, '');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -266,38 +267,56 @@ function broadcastRoom(room) {
   }
 }
 
+
+async function proxyApi(req, res, pathname, search) {
+  try {
+    const target = `${PAGES_API_BASE}${pathname}${search || ''}`;
+    const headers = {};
+    if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+    let body;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      body = await readBody(req);
+    }
+    const upstream = await fetch(target, {
+      method: req.method,
+      headers,
+      body,
+      redirect: 'follow',
+    });
+    const text = await upstream.text();
+    res.writeHead(upstream.status, {
+      'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET,POST,OPTIONS',
+      'access-control-allow-headers': 'content-type',
+    });
+    res.end(text);
+  } catch (e) {
+    sendJson(res, 502, { ok: false, error: 'Pages API proxy failed', details: e.message || String(e) });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
 
-  if (req.method === 'OPTIONS') return sendJson(res, 200, { ok: true });
+  if (req.method === 'OPTIONS' && pathname.startsWith('/api/')) return proxyApi(req, res, pathname, url.search);
 
   if (pathname === '/api/top' && req.method === 'GET') {
-    return sendJson(res, 200, {
-      rows: getTop(
-        url.searchParams.get('seed'),
-        url.searchParams.get('mode'),
-        url.searchParams.get('limit'),
-        url.searchParams.get('scope') || 'seed'
-      ),
-    });
+    return proxyApi(req, res, pathname, url.search);
   }
 
   if (pathname === '/api/ghost' && req.method === 'GET') {
-    return sendJson(res, 200, {
-      ghost: getGhost(url.searchParams.get('seed'), url.searchParams.get('mode')),
-    });
+    return proxyApi(req, res, pathname, url.search);
+  }
+
+  if (pathname === '/api/mebest' && req.method === 'GET') {
+    return proxyApi(req, res, pathname, url.search);
   }
 
   if (pathname === '/api/submit' && req.method === 'POST') {
-    try {
-      const raw = await readBody(req);
-      const body = JSON.parse(raw || '{}');
-      const row = submitRow(body);
-      return sendJson(res, 200, { ok: true, row });
-    } catch (e) {
-      return sendJson(res, 400, { ok: false, error: e.message || 'Bad request' });
-    }
+    return proxyApi(req, res, pathname, url.search);
   }
 
   if (pathname === '/robots.txt' && req.method === 'GET') {
@@ -398,6 +417,25 @@ wss.on('connection', (ws) => {
       return;
     }
 
+
+    if (msg.type === 'signal') {
+      const room = rooms.get(ws.player.room);
+      if (!room) return;
+      const payload = JSON.stringify({
+        type: 'signal',
+        kind: String(msg.kind || 'hello').slice(0,16),
+        id: ws.player.id,
+        name: ws.player.name,
+        x: clamp(Number(msg.x) || 0, -1000000, 1000000),
+        y: clamp(Number(msg.y) || 0, -1000000, 1000000),
+        color: ws.player.color || '#79C8FF',
+        ts: Date.now(),
+      });
+      for (const p of room.players.values()) {
+        if (p.ws && p.ws.readyState === 1) p.ws.send(payload);
+      }
+      return;
+    }
     if (msg.type === 'ping') {
       if (typeof msg.name === 'string' && msg.name.trim()) {
         ws.player.name = sanitizeName(msg.name);
